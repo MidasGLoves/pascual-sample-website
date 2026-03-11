@@ -1,31 +1,6 @@
-import { useState, FormEvent } from 'react';
 import { Droplet, MapPin, Phone, Mail } from 'lucide-react';
 
 export default function Footer() {
-  const [subscribed, setSubscribed] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const handleSubscribe = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    const formData = new FormData(e.target as HTMLFormElement);
-    const email = formData.get('email');
-    
-    try {
-      await fetch('/api/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      setSubscribed(true);
-    } catch (error) {
-      console.error('Error subscribing:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <footer className="bg-midnight py-16 border-t border-white/10 relative overflow-hidden">
       {/* Subtle Watermark */}
@@ -33,7 +8,7 @@ export default function Footer() {
         <Droplet size={400} className="text-white" />
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative z-10">
+      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-12 relative z-10">
         
         {/* Brand Column */}
         <div>
@@ -81,32 +56,6 @@ export default function Footer() {
               <span>1234 Plumber Way, Suite 100<br/>Austin, TX 78701</span>
             </li>
           </ul>
-        </div>
-
-        {/* Newsletter */}
-        <div>
-          <h3 className="font-display font-bold text-white mb-6">Join the Insider</h3>
-          <p className="font-sans text-steel text-sm mb-4">
-            Get Austin seasonal plumbing alerts (like freeze warnings) and exclusive discounts.
-          </p>
-          {subscribed ? (
-            <div className="bg-teal/10 border border-teal/20 text-teal px-4 py-3 rounded-sm font-sans text-sm font-bold flex items-center gap-2">
-              Thanks for subscribing!
-            </div>
-          ) : (
-            <form onSubmit={handleSubscribe} className="flex">
-              <input 
-                required
-                name="email"
-                type="email" 
-                placeholder="Email address" 
-                className="bg-white/5 border border-white/10 text-white px-4 py-2 rounded-l-sm w-full focus:outline-none focus:border-teal font-sans text-sm transition-colors"
-              />
-              <button disabled={loading} type="submit" className="bg-copper hover:bg-copper/90 text-white px-4 py-2 rounded-r-sm font-sans font-bold text-sm transition-colors disabled:opacity-70">
-                {loading ? '...' : 'Join'}
-              </button>
-            </form>
-          )}
         </div>
 
       </div>

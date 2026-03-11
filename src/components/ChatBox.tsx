@@ -3,8 +3,6 @@ import { MessageCircle, X, Send, Loader2, Bot } from 'lucide-react';
 import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 const bookServiceTool: FunctionDeclaration = {
   name: 'bookService',
   description: 'Books a plumbing service request for the customer. Call this ONLY after you have collected their name, full address, either email or phone, and the type of service needed.',
@@ -52,6 +50,7 @@ export default function ChatBox() {
     setChatHistory(newHistory);
 
     try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: newHistory,

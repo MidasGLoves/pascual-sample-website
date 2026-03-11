@@ -61,7 +61,7 @@ export default function Reviews() {
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: i * 0.1 }}
-              className="min-w-[320px] md:min-w-[400px] bg-white p-8 rounded-sm shadow-sm border border-slate-100 snap-center flex-shrink-0"
+              className="w-[85vw] max-w-[400px] bg-white p-8 rounded-sm shadow-sm border border-slate-100 snap-center flex-shrink-0 flex flex-col"
             >
               <div className="flex justify-between items-start mb-6">
                 <div className="flex gap-1">
