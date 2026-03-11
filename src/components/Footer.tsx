@@ -3,10 +3,27 @@ import { Droplet, MapPin, Phone, Mail } from 'lucide-react';
 
 export default function Footer() {
   const [subscribed, setSubscribed] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubscribe = (e: FormEvent) => {
+  const handleSubscribe = async (e: FormEvent) => {
     e.preventDefault();
-    setSubscribed(true);
+    setLoading(true);
+    
+    const formData = new FormData(e.target as HTMLFormElement);
+    const email = formData.get('email');
+    
+    try {
+      await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      setSubscribed(true);
+    } catch (error) {
+      console.error('Error subscribing:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -80,12 +97,13 @@ export default function Footer() {
             <form onSubmit={handleSubscribe} className="flex">
               <input 
                 required
+                name="email"
                 type="email" 
                 placeholder="Email address" 
                 className="bg-white/5 border border-white/10 text-white px-4 py-2 rounded-l-sm w-full focus:outline-none focus:border-teal font-sans text-sm transition-colors"
               />
-              <button type="submit" className="bg-copper hover:bg-copper/90 text-white px-4 py-2 rounded-r-sm font-sans font-bold text-sm transition-colors">
-                Join
+              <button disabled={loading} type="submit" className="bg-copper hover:bg-copper/90 text-white px-4 py-2 rounded-r-sm font-sans font-bold text-sm transition-colors disabled:opacity-70">
+                {loading ? '...' : 'Join'}
               </button>
             </form>
           )}

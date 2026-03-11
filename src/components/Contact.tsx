@@ -4,10 +4,35 @@ import { CheckCircle } from 'lucide-react';
 
 export default function Contact() {
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    
+    const formData = new FormData(e.target as HTMLFormElement);
+    const email = formData.get('email') as string;
+    const phone = formData.get('phone') as string;
+    
+    if (!email && !phone) {
+      alert('Please provide either an email address or a phone number so we can contact you.');
+      return;
+    }
+
+    setLoading(true);
+    const data = Object.fromEntries(formData.entries());
+    
+    try {
+      await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      setSubmitted(true);
+    } catch (error) {
+      console.error('Error submitting form:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,17 +80,27 @@ export default function Contact() {
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-bold text-slate900 mb-2">Full Name</label>
-                <input required type="text" className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none transition-all" placeholder="John Doe" />
+                <label className="block text-sm font-bold text-slate900 mb-2">Full Name *</label>
+                <input name="name" required type="text" className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none transition-all" placeholder="John Doe" />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate900 mb-2">Phone Number</label>
-                <input required type="tel" className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none transition-all" placeholder="(512) 555-0199" />
+                <label className="block text-sm font-bold text-slate900 mb-2">Service Address *</label>
+                <input name="address" required type="text" className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none transition-all" placeholder="123 Main St, Austin, TX 78701" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-bold text-slate900 mb-2">Email Address <span className="text-slate-500 font-normal">(Provide Email or Phone)</span></label>
+                <input name="email" type="email" className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none transition-all" placeholder="john@example.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate900 mb-2">Phone Number <span className="text-slate-500 font-normal">(Provide Phone or Email)</span></label>
+                <input name="phone" type="tel" className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none transition-all" placeholder="(512) 555-0199" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate900 mb-2">Service Needed</label>
-              <select className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none bg-white transition-all">
+              <label className="block text-sm font-bold text-slate900 mb-2">Service Needed *</label>
+              <select name="service" className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none bg-white transition-all">
                 <option>General Plumbing Repair</option>
                 <option>Water Heater Service</option>
                 <option>Drain Cleaning</option>
@@ -75,10 +110,10 @@ export default function Contact() {
             </div>
             <div>
               <label className="block text-sm font-bold text-slate900 mb-2">Message (Optional)</label>
-              <textarea rows={3} className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none transition-all resize-none" placeholder="Briefly describe the issue..."></textarea>
+              <textarea name="message" rows={3} className="w-full px-4 py-3 rounded-sm border border-slate-300 focus:border-teal focus:ring-2 focus:ring-teal/20 outline-none transition-all resize-none" placeholder="Briefly describe the issue..."></textarea>
             </div>
-            <button type="submit" className="w-full bg-copper hover:bg-copper/90 text-white px-8 py-4 rounded-sm font-sans font-bold text-lg transition-all shadow-[4px_4px_0px_rgba(217,119,54,0.2)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_rgba(217,119,54,0.2)]">
-              Request Dispatch
+            <button disabled={loading} type="submit" className="w-full bg-copper hover:bg-copper/90 text-white px-8 py-4 rounded-sm font-sans font-bold text-lg transition-all shadow-[4px_4px_0px_rgba(217,119,54,0.2)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_rgba(217,119,54,0.2)] disabled:opacity-70 disabled:cursor-not-allowed">
+              {loading ? 'Sending...' : 'Request Dispatch'}
             </button>
           </motion.form>
         )}

@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Menu, X, Phone, Droplet } from 'lucide-react';
+import { Menu, X, Phone, Droplet, Lock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -43,12 +49,20 @@ export default function Navbar() {
             <a href="#contact" className="bg-copper hover:bg-copper/90 text-white px-6 py-2.5 rounded-sm font-sans font-semibold text-sm transition-all shadow-[4px_4px_0px_rgba(0,229,255,0.2)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_rgba(0,229,255,0.2)] inline-block">
               Book Online
             </a>
+            <button onClick={() => setShowLoginModal(true)} className="text-white/50 hover:text-white transition-colors ml-2" title="Admin Login">
+              <Lock size={18} />
+            </button>
           </div>
 
           {/* Mobile Toggle */}
-          <button onClick={() => setIsOpen(true)} className="lg:hidden text-white hover:text-teal transition-colors">
-            <Menu size={28} />
-          </button>
+          <div className="lg:hidden flex items-center gap-4">
+            <button onClick={() => setShowLoginModal(true)} className="text-white/50 hover:text-white transition-colors">
+              <Lock size={20} />
+            </button>
+            <button onClick={() => setIsOpen(true)} className="text-white hover:text-teal transition-colors">
+              <Menu size={28} />
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -98,6 +112,71 @@ export default function Navbar() {
               </a>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin Login Modal */}
+      <AnimatePresence>
+        {showLoginModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-midnight/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-sm shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h3 className="font-display font-bold text-xl text-slate900 flex items-center gap-2">
+                  <Lock size={20} className="text-teal" /> Admin Access
+                </h3>
+                <button onClick={() => { setShowLoginModal(false); setLoginError(''); }} className="text-slate-400 hover:text-slate-600">
+                  <X size={24} />
+                </button>
+              </div>
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (username === 'Pascual' && password === 'Pascual') {
+                    localStorage.setItem('ironflow_admin', 'true');
+                    setShowLoginModal(false);
+                    navigate('/admin');
+                  } else {
+                    setLoginError('Invalid credentials');
+                  }
+                }} 
+                className="p-6 space-y-4"
+              >
+                {loginError && (
+                  <div className="bg-red-50 text-red-600 p-3 rounded-sm text-sm font-semibold border border-red-200">
+                    {loginError}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-bold text-slate900 mb-1">Username</label>
+                  <input 
+                    type="text" 
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-sm focus:border-teal focus:ring-1 focus:ring-teal outline-none"
+                    placeholder="Enter username"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate900 mb-1">Password</label>
+                  <input 
+                    type="password" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-sm focus:border-teal focus:ring-1 focus:ring-teal outline-none"
+                    placeholder="Enter password"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-midnight text-white font-bold py-3 rounded-sm hover:bg-slate-800 transition-colors mt-2">
+                  Login to Dashboard
+                </button>
+              </form>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </>
