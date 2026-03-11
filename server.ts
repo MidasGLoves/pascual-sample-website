@@ -38,7 +38,7 @@ app.post('/api/leads', async (req, res) => {
     // Send email notification
     await transporter.sendMail({
       from: `"IronFlow Plumbing Website" <${process.env.EMAIL_USER || 'cpascual1311@gmail.com'}>`,
-      to: process.env.BUSINESS_EMAIL || 'jeitherjjoyd@gmail.com', // Send to the business owner
+      to: process.env.BUSINESS_EMAIL || 'jeither@nascentartny.com', // Send to the business owner
       subject: `New Service Request from ${newLead.name}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
