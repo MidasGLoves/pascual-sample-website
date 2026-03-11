@@ -13,8 +13,8 @@ export default function Story() {
         >
           <div className="absolute inset-0 bg-gold translate-x-4 translate-y-4" />
           <img 
-            src="https://images.unsplash.com/photo-1580128660010-fd027e1e587a?q=80&w=2000&auto=format&fit=crop" 
-            alt="Barack Obama" 
+            src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/President_Barack_Obama.jpg/1024px-President_Barack_Obama.jpg" 
+            alt="President Barack Obama Official Portrait" 
             className="relative z-10 w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700"
             referrerPolicy="no-referrer"
           />

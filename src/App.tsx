@@ -5,22 +5,28 @@
 
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
-import Story from './components/Story';
-import Timeline from './components/Timeline';
-import Quotes from './components/Quotes';
+import TrustBar from './components/TrustBar';
+import ServicesGrid from './components/ServicesGrid';
+import USPs from './components/USPs';
 import Stats from './components/Stats';
+import Reviews from './components/Reviews';
+import MeetMarcus from './components/MeetMarcus';
+import Contact from './components/Contact';
 import Footer from './components/Footer';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-navy text-offwhite font-sans selection:bg-crimson selection:text-white">
+    <div className="min-h-screen bg-limestone text-slate900 font-sans selection:bg-teal selection:text-midnight">
       <Navbar />
       <main>
         <Hero />
-        <Story />
-        <Timeline />
-        <Quotes />
+        <TrustBar />
+        <ServicesGrid />
+        <USPs />
         <Stats />
+        <Reviews />
+        <MeetMarcus />
+        <Contact />
       </main>
       <Footer />
     </div>

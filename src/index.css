@@ -1,21 +1,27 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400;1,600;1,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=Plus+Jakarta+Sans:wght@400;500;600&family=Space+Grotesk:wght@600&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-navy: #0A1426;
-  --color-alabaster: #F4F4F0;
-  --color-gold: #D4AF37;
-  --color-crimson: #9B111E;
-  --color-offwhite: #EAEAEA;
+  --color-midnight: #0B1120;
+  --color-teal: #00E5FF;
+  --color-copper: #D97736;
+  --color-limestone: #F8FAFC;
+  --color-slate900: #0F172A;
+  --color-steel: #94A3B8;
   
-  --font-sans: "Inter", sans-serif;
-  --font-serif: "Playfair Display", serif;
-  --font-quote: "Cormorant Garamond", serif;
+  --font-sans: "Plus Jakarta Sans", sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "Space Grotesk", monospace;
 }
 
 body {
-  background-color: var(--color-navy);
-  color: var(--color-offwhite);
+  background-color: var(--color-limestone);
+  color: var(--color-slate900);
   font-family: var(--font-sans);
   overflow-x: hidden;
+}
+
+/* Custom Utilities */
+.text-balance {
+  text-wrap: balance;
 }
