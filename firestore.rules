@@ -8,16 +8,17 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        (request.auth.token.email == "jeither@nascentartny.com" && request.auth.token.email_verified == true) ||
+        (request.auth.token.email == "cpascual1311@gmail.com" && request.auth.token.email_verified == true) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
     match /leads/{leadId} {
-      allow read: if isAdmin();
-      allow create: if true;
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, write: if true;
+    }
+
+    match /recipients/{recipientId} {
+      allow read, write: if true;
     }
 
     match /users/{userId} {

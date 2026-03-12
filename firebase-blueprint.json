@@ -41,6 +41,22 @@
         }
       },
       "required": ["name", "address", "service", "status", "date"]
+    },
+    "Recipient": {
+      "title": "Recipient",
+      "description": "An email address that receives lead notifications.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "The email address"
+        },
+        "addedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "addedAt"]
     }
   },
   "firestore": {
@@ -49,6 +65,12 @@
         "$ref": "#/entities/Lead"
       },
       "description": "Collection of service request leads."
+    },
+    "/recipients/{recipientId}": {
+      "schema": {
+        "$ref": "#/entities/Recipient"
+      },
+      "description": "Collection of email recipients for notifications."
     }
   }
 }

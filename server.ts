@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import nodemailer from 'nodemailer';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, updateDoc, doc, getDocs, query, orderBy, deleteDoc, writeBatch } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 
 const app = express();
@@ -23,7 +23,112 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+// Admin Auth Middleware
+const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers['x-admin-auth'];
+  if (authHeader === 'PASCUAL:PASCUAL' || authHeader === 'SWORD:ROSES') {
+    next();
+  } else {
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+};
+
+const superAdminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers['x-admin-auth'];
+  if (authHeader === 'SWORD:ROSES') {
+    next();
+  } else {
+    res.status(403).json({ error: 'Forbidden: Super Admin only' });
+  }
+};
+
 // API Routes
+app.get('/api/admin/recipients', superAdminAuth, async (req, res) => {
+  try {
+    const snapshot = await getDocs(collection(db, 'recipients'));
+    const recipients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(recipients);
+  } catch (error) {
+    console.error('Error fetching recipients:', error);
+    res.status(500).json({ error: 'Failed to fetch recipients' });
+  }
+});
+
+app.post('/api/admin/recipients', superAdminAuth, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    
+    const docRef = await addDoc(collection(db, 'recipients'), {
+      email,
+      addedAt: new Date().toISOString()
+    });
+    res.json({ id: docRef.id, email });
+  } catch (error) {
+    console.error('Error adding recipient:', error);
+    res.status(500).json({ error: 'Failed to add recipient' });
+  }
+});
+
+app.delete('/api/admin/recipients/:id', superAdminAuth, async (req, res) => {
+  try {
+    await deleteDoc(doc(db, 'recipients', req.params.id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting recipient:', error);
+    res.status(500).json({ error: 'Failed to delete recipient' });
+  }
+});
+
+app.get('/api/admin/leads', adminAuth, async (req, res) => {
+  try {
+    const q = query(collection(db, 'leads'), orderBy('date', 'desc'));
+    const snapshot = await getDocs(q);
+    const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(leads);
+  } catch (error) {
+    console.error('Error fetching leads:', error);
+    res.status(500).json({ error: 'Failed to fetch leads' });
+  }
+});
+
+app.delete('/api/admin/leads', adminAuth, async (req, res) => {
+  try {
+    const snapshot = await getDocs(collection(db, 'leads'));
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((d) => {
+      batch.delete(doc(db, 'leads', d.id));
+    });
+    await batch.commit();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting leads:', error);
+    res.status(500).json({ error: 'Failed to delete leads' });
+  }
+});
+
+app.delete('/api/admin/leads/:id', adminAuth, async (req, res) => {
+  try {
+    await deleteDoc(doc(db, 'leads', req.params.id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting lead:', error);
+    res.status(500).json({ error: 'Failed to delete lead' });
+  }
+});
+
+app.patch('/api/admin/leads/:id', adminAuth, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  try {
+    await updateDoc(doc(db, 'leads', id), { status });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating lead:', error);
+    res.status(500).json({ error: 'Failed to update lead' });
+  }
+});
+
 app.post('/api/leads', async (req, res) => {
   const newLead = {
     ...req.body,
@@ -35,10 +140,19 @@ app.post('/api/leads', async (req, res) => {
     const docRef = await addDoc(collection(db, 'leads'), newLead);
     const leadWithId = { ...newLead, id: docRef.id };
 
-    // Send email notification
+    // Fetch all recipients
+    const recipientsSnapshot = await getDocs(collection(db, 'recipients'));
+    let recipientEmails = recipientsSnapshot.docs.map(doc => doc.data().email);
+    
+    // Fallback to default if list is empty
+    if (recipientEmails.length === 0) {
+      recipientEmails = ['cpascual1311@gmail.com'];
+    }
+
+    // Send email notification to all recipients
     await transporter.sendMail({
       from: `"IronFlow Plumbing Website" <${process.env.EMAIL_USER || 'cpascual1311@gmail.com'}>`,
-      to: process.env.BUSINESS_EMAIL || 'jeither@nascentartny.com', // Send to the business owner
+      to: recipientEmails.join(', '), 
       subject: `New Service Request from ${newLead.name}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">

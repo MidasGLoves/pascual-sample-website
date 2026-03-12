@@ -52,10 +52,36 @@ export default function ChatBox() {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.1-pro-preview',
         contents: newHistory,
         config: {
-          systemInstruction: "You are a helpful, expert plumbing assistant for IronFlow Plumbing in Austin, TX. Help users diagnose plumbing issues. If they need to book a service, you MUST collect their Name, Full Service Address, either their Phone Number OR Email Address (getting both is best, but only one is required), and a brief description of the issue. Once you have these pieces of information, use the `bookService` tool to schedule it. Be conversational, professional, and concise.",
+          systemInstruction: `You are the expert AI assistant for IronFlow Plumbing in Austin, TX. 
+          
+          BUSINESS KNOWLEDGE:
+          - Owner: Marcus "Iron" Delgado, a Master Plumber (Lic #M-39482) with 22 years of experience.
+          - Heritage: 3rd generation Texas plumber. Family-owned, not a franchise.
+          - Service Area: Greater Austin, TX.
+          - Promise: 60-minute emergency response or the call is free.
+          - Pricing: Upfront flat-rate pricing. No hidden fees.
+          - Warranty: 2-year warranty on all work.
+          - Phone: (512) 555-0199.
+          
+          CAPABILITIES:
+          - Help users diagnose plumbing issues (leaks, clogs, water heater problems, etc.).
+          - Provide expert advice on maintenance.
+          - Book service requests using the 'bookService' tool.
+          
+          BOOKING PROTOCOL:
+          If a user needs service, you MUST collect:
+          1. Full Name
+          2. Full Service Address
+          3. Phone Number OR Email (both is better)
+          4. Description of the issue.
+          
+          Once you have these, call 'bookService' immediately. 
+          
+          TONE:
+          Professional, expert, confident, and empathetic. You represent Marcus Delgado's high standards. Be concise but helpful.`,
           tools: [{ functionDeclarations: [bookServiceTool] }]
         }
       });
@@ -94,7 +120,10 @@ export default function ChatBox() {
       }
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "I'm sorry, I encountered an error. Please try calling us directly at (512) 555-0199." }]);
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: "I apologize, but I'm having trouble connecting to my plumbing knowledge base right now. Please call Marcus directly at (512) 555-0199 for immediate assistance!" 
+      }]);
     } finally {
       setIsLoading(false);
     }
