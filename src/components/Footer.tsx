@@ -63,7 +63,7 @@ export default function Footer() {
       {/* Bottom Bar */}
       <div className="max-w-7xl mx-auto px-6 mt-16 pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
         <p className="font-sans text-steel text-xs">
-          © {new Date().getFullYear()} IronFlow Plumbing & Solutions. All rights reserved.
+          © {new Date().getFullYear()} IRONFLOW Plumbing & Solutions. All rights reserved.
         </p>
       </div>
     </footer>

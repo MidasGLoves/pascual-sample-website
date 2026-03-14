@@ -16,8 +16,8 @@ export default function MeetMarcus() {
         >
           <div className="absolute inset-0 bg-teal translate-x-4 translate-y-4 rounded-sm" />
           <img 
-            src="https://raw.githubusercontent.com/MidasGLoves/pascual-sample-website/main/Screenshot%202026-03-11%20182437.png" 
-            alt="Marcus Delgado - Owner of IronFlow Plumbing fixing a pipe" 
+            src="https://raw.githubusercontent.com/MidasGLoves/pascual-sample-website/main/pexels-anilkarakaya-6419128.jpg" 
+            alt="Marcus Delgado - Owner of IRONFLOW Plumbing fixing a pipe" 
             className="relative z-10 w-full h-full object-cover rounded-sm grayscale hover:grayscale-0 transition-all duration-700"
             referrerPolicy="no-referrer"
           />
@@ -49,7 +49,7 @@ export default function MeetMarcus() {
           
           <div className="font-sans text-lg text-slate-600 space-y-6 leading-relaxed">
             <p>
-              "I didn't just learn plumbing from a textbook; I learned it holding a flashlight for my grandfather when I was ten years old. IronFlow isn't a corporate franchise owned by an investment firm. We are an Austin family business."
+              "I didn't just learn plumbing from a textbook; I learned it holding a flashlight for my grandfather when I was ten years old. IRONFLOW isn't a corporate franchise owned by an investment firm. We are an Austin family business."
             </p>
             <p>
               "We know the limestone soil that shifts your pipes, we know the hard water that eats your heaters, and we know that when water is pouring through your ceiling at 2 AM, you don't want a salesman—you want a master tradesman."

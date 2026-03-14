@@ -11,13 +11,13 @@ const reviews = [
   {
     name: "David R.",
     location: "Round Rock",
-    text: "Tired of cold showers. IronFlow gave me a flat quote for a tankless system over the phone. No upselling, no BS. The install is so clean it looks like a piece of art on my garage wall.",
+    text: "Tired of cold showers. IRONFLOW gave me a flat quote for a tankless system over the phone. No upselling, no BS. The install is so clean it looks like a piece of art on my garage wall.",
     date: "1 month ago"
   },
   {
     name: "Elena M.",
     location: "South Austin",
-    text: "Three other plumbers told me I needed my yard dug up for a $10k sewer replacement. IronFlow ran a camera, found a localized root intrusion, hydro-jetted it, and fixed it for a fraction of the cost. Honest guys.",
+    text: "Three other plumbers told me I needed my yard dug up for a $10k sewer replacement. IRONFLOW ran a camera, found a localized root intrusion, hydro-jetted it, and fixed it for a fraction of the cost. Honest guys.",
     date: "2 months ago"
   },
   {
@@ -29,7 +29,7 @@ const reviews = [
   {
     name: "James B.",
     location: "Pflugerville",
-    text: "It's rare to find contractors who actually answer the phone, show up when they say they will, and charge what they quoted. IronFlow is my plumber for life now.",
+    text: "It's rare to find contractors who actually answer the phone, show up when they say they will, and charge what they quoted. IRONFLOW is my plumber for life now.",
     date: "4 months ago"
   }
 ];

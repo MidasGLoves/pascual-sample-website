@@ -47,7 +47,7 @@ export default function USPs() {
             viewport={{ once: true }}
             className="font-display text-4xl md:text-5xl font-black text-white mb-4"
           >
-            Why Choose IronFlow?
+            Why Choose IRONFLOW?
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}

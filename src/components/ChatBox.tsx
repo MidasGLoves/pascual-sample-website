@@ -23,7 +23,7 @@ const bookServiceTool: FunctionDeclaration = {
 export default function ChatBox() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{role: 'user'|'model', text: string}[]>([
-    { role: 'model', text: 'Hi! I am the IronFlow AI Assistant. How can I help you with your plumbing today?' }
+    { role: 'model', text: 'Hi! I am the IRONFLOW AI Assistant. How can I help you with your plumbing today?' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +31,7 @@ export default function ChatBox() {
 
   const [chatHistory, setChatHistory] = useState<any[]>([
      { role: 'user', parts: [{ text: 'Hello' }] },
-     { role: 'model', parts: [{ text: 'Hi! I am the IronFlow AI Assistant. How can I help you with your plumbing today?' }] }
+     { role: 'model', parts: [{ text: 'Hi! I am the IRONFLOW AI Assistant. How can I help you with your plumbing today?' }] }
   ]);
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function ChatBox() {
         model: 'gemini-3.1-pro-preview',
         contents: newHistory,
         config: {
-          systemInstruction: `You are the expert AI assistant for IronFlow Plumbing in Austin, TX. 
+          systemInstruction: `You are the expert AI assistant for IRONFLOW Plumbing in Austin, TX. 
           
           BUSINESS KNOWLEDGE:
           - Owner: Marcus "Iron" Delgado, a Master Plumber (Lic #M-39482) with 22 years of experience.
@@ -152,7 +152,7 @@ export default function ChatBox() {
             <div className="bg-midnight text-white p-4 flex justify-between items-center">
               <div className="flex items-center gap-2 font-display font-bold">
                 <Bot className="text-teal" size={20} />
-                IronFlow AI
+                IRONFLOW AI
               </div>
               <button onClick={() => setIsOpen(false)} className="text-white/70 hover:text-white">
                 <X size={20} />
