@@ -6,29 +6,7 @@ import fs from 'fs';
 import Database from 'better-sqlite3';
 
 // Initialize SQLite Database
-const dbPath = path.join(process.cwd(), 'database.sqlite');
-const db = new Database(dbPath);
-
-// Create tables if they don't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS leads (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    address TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
-    service TEXT NOT NULL,
-    message TEXT,
-    status TEXT NOT NULL,
-    date TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS recipients (
-    id TEXT PRIMARY KEY,
-    email TEXT NOT NULL,
-    addedAt TEXT NOT NULL
-  );
-`);
+let db: Database.Database;
 
 const app = express();
 app.use(cors());
@@ -46,13 +24,17 @@ app.use((req, res, next) => {
 const PORT = 3000;
 
 // Email configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'cpascual1311@gmail.com',
-    pass: process.env.EMAIL_PASS || 'uiie ohzv gvdw ncth'
-  }
-});
+let transporter: nodemailer.Transporter;
+
+function initEmail() {
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER || 'cpascual1311@gmail.com',
+      pass: process.env.EMAIL_PASS || 'uiie ohzv gvdw ncth'
+    }
+  });
+}
 
 // Admin Auth Middleware
 const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -251,22 +233,69 @@ app.all('/api/*', (req, res) => {
 
 // Start Server
 async function startServer() {
+  console.log('Starting server initialization...');
+  
+  try {
+    const dbPath = path.join(process.cwd(), 'database.sqlite');
+    db = new Database(dbPath);
+    
+    // Create tables if they don't exist
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS leads (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        address TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        service TEXT NOT NULL,
+        message TEXT,
+        status TEXT NOT NULL,
+        date TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS recipients (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        addedAt TEXT NOT NULL
+      );
+    `);
+    console.log('SQLite Database initialized at', dbPath);
+  } catch (e) {
+    console.error('Failed to initialize SQLite:', e);
+    process.exit(1);
+  }
+  
+  try {
+    initEmail();
+    console.log('Email transporter initialized');
+  } catch (e) {
+    console.error('Failed to initialize email:', e);
+  }
+
   console.log('Attempting to start server on port', PORT);
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully started and listening on http://0.0.0.0:${PORT}`);
   });
 
-  server.on('error', (err) => {
-    console.error('SERVER ERROR EVENT:', err);
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. This is expected if the dev server is restarting.`);
+    } else {
+      console.error('SERVER ERROR EVENT:', err);
+    }
   });
 
   // Serve static files from dist
   const distPath = path.join(process.cwd(), 'dist');
+  console.log('Checking for static files at:', distPath);
   if (fs.existsSync(distPath)) {
+    console.log('Static files found, mounting express.static');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+  } else {
+    console.warn('Static files NOT found at:', distPath);
   }
 
   // Global error handler
@@ -282,6 +311,8 @@ async function startServer() {
   });
 }
 
+console.log('Executing startServer...');
 startServer().catch(err => {
   console.error('CRITICAL: Failed to start server function:', err);
+  process.exit(1);
 });
