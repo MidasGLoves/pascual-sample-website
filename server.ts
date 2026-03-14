@@ -1,23 +1,34 @@
 import express from 'express';
 import cors from 'cors';
-import { createServer as createViteServer } from 'vite';
 import nodemailer from 'nodemailer';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, updateDoc, doc, getDocs, query, orderBy, deleteDoc, writeBatch } from 'firebase/firestore';
 import path from 'path';
 import fs from 'fs';
+import Database from 'better-sqlite3';
 
-let firebaseConfig: any = {};
-try {
-  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } else {
-    console.warn('firebase-applet-config.json not found, using empty config');
-  }
-} catch (error) {
-  console.error('Failed to load firebase-applet-config.json:', error);
-}
+// Initialize SQLite Database
+const dbPath = path.join(process.cwd(), 'database.sqlite');
+const db = new Database(dbPath);
+
+// Create tables if they don't exist
+db.exec(`
+  CREATE TABLE IF NOT EXISTS leads (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    address TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    service TEXT NOT NULL,
+    message TEXT,
+    status TEXT NOT NULL,
+    date TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS recipients (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    addedAt TEXT NOT NULL
+  );
+`);
 
 const app = express();
 app.use(cors());
@@ -30,17 +41,6 @@ app.use((req, res, next) => {
 });
 
 const PORT = 3000;
-
-// Initialize Firebase
-let db: any;
-try {
-  console.log('Initializing Firebase with config:', { ...firebaseConfig, apiKey: '***' });
-  const firebaseApp = initializeApp(firebaseConfig);
-  db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-  console.log('Firebase initialized successfully');
-} catch (error) {
-  console.error('Firebase initialization FAILED:', error);
-}
 
 // Email configuration
 const transporter = nodemailer.createTransport({
@@ -75,10 +75,9 @@ app.get('/api/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/admin/recipients', superAdminAuth, async (req, res) => {
+app.get('/api/admin/recipients', superAdminAuth, (req, res) => {
   try {
-    const snapshot = await getDocs(collection(db, 'recipients'));
-    const recipients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const recipients = db.prepare('SELECT * FROM recipients').all();
     res.json(recipients);
   } catch (error) {
     console.error('Error fetching recipients:', error);
@@ -86,51 +85,38 @@ app.get('/api/admin/recipients', superAdminAuth, async (req, res) => {
   }
 });
 
-app.post('/api/admin/recipients', superAdminAuth, async (req, res) => {
-  console.log('POST /api/admin/recipients - Request received:', req.body);
+app.post('/api/admin/recipients', superAdminAuth, (req, res) => {
   try {
     const { email } = req.body;
     if (!email) {
-      console.warn('POST /api/admin/recipients - Missing email');
       return res.status(400).json({ error: 'Email is required' });
     }
     
-    console.log('POST /api/admin/recipients - Adding to Firestore...');
-    const docRef = await addDoc(collection(db, 'recipients'), {
-      email,
-      addedAt: new Date().toISOString()
-    });
-    console.log('POST /api/admin/recipients - Success, ID:', docRef.id);
-    res.json({ id: docRef.id, email });
+    const id = Math.random().toString(36).substring(2, 15);
+    const addedAt = new Date().toISOString();
+    
+    db.prepare('INSERT INTO recipients (id, email, addedAt) VALUES (?, ?, ?)').run(id, email, addedAt);
+    
+    res.json({ id, email });
   } catch (error) {
-    console.error('POST /api/admin/recipients - CRITICAL ERROR:', error);
-    res.status(500).json({ 
-      error: 'Database Error', 
-      message: error instanceof Error ? error.message : String(error) 
-    });
+    console.error('Error adding recipient:', error);
+    res.status(500).json({ error: 'Database Error' });
   }
 });
 
-app.all('/api/*', (req, res) => {
-  console.warn(`Unmatched API request: ${req.method} ${req.url}`);
-  res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
-});
-
-app.delete('/api/admin/recipients/:id', superAdminAuth, async (req, res) => {
+app.delete('/api/admin/recipients/:id', superAdminAuth, (req, res) => {
   try {
-    await deleteDoc(doc(db, 'recipients', req.params.id));
+    db.prepare('DELETE FROM recipients WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting recipient:', error);
-    res.status(500).json({ error: error instanceof Error ? `Database Error: ${error.message}` : 'Failed to delete recipient' });
+    res.status(500).json({ error: 'Failed to delete recipient' });
   }
 });
 
-app.get('/api/admin/leads', adminAuth, async (req, res) => {
+app.get('/api/admin/leads', adminAuth, (req, res) => {
   try {
-    const q = query(collection(db, 'leads'), orderBy('date', 'desc'));
-    const snapshot = await getDocs(q);
-    const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const leads = db.prepare('SELECT * FROM leads ORDER BY date DESC').all();
     res.json(leads);
   } catch (error) {
     console.error('Error fetching leads:', error);
@@ -138,14 +124,9 @@ app.get('/api/admin/leads', adminAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/leads', adminAuth, async (req, res) => {
+app.delete('/api/admin/leads', adminAuth, (req, res) => {
   try {
-    const snapshot = await getDocs(collection(db, 'leads'));
-    const batch = writeBatch(db);
-    snapshot.docs.forEach((d) => {
-      batch.delete(doc(db, 'leads', d.id));
-    });
-    await batch.commit();
+    db.prepare('DELETE FROM leads').run();
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting leads:', error);
@@ -153,9 +134,9 @@ app.delete('/api/admin/leads', adminAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/leads/:id', adminAuth, async (req, res) => {
+app.delete('/api/admin/leads/:id', adminAuth, (req, res) => {
   try {
-    await deleteDoc(doc(db, 'leads', req.params.id));
+    db.prepare('DELETE FROM leads WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting lead:', error);
@@ -163,11 +144,11 @@ app.delete('/api/admin/leads/:id', adminAuth, async (req, res) => {
   }
 });
 
-app.patch('/api/admin/leads/:id', adminAuth, async (req, res) => {
+app.patch('/api/admin/leads/:id', adminAuth, (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   try {
-    await updateDoc(doc(db, 'leads', id), { status });
+    db.prepare('UPDATE leads SET status = ? WHERE id = ?').run(status, id);
     res.json({ success: true });
   } catch (error) {
     console.error('Error updating lead:', error);
@@ -176,46 +157,49 @@ app.patch('/api/admin/leads/:id', adminAuth, async (req, res) => {
 });
 
 app.post('/api/leads', async (req, res) => {
-  const newLead = {
-    ...req.body,
-    status: 'new',
-    date: new Date().toISOString()
-  };
+  const id = Math.random().toString(36).substring(2, 15);
+  const date = new Date().toISOString();
+  const status = 'new';
+  const { name, address, email, phone, service, message } = req.body;
 
   try {
-    const docRef = await addDoc(collection(db, 'leads'), newLead);
-    const leadWithId = { ...newLead, id: docRef.id };
+    db.prepare(`
+      INSERT INTO leads (id, name, address, email, phone, service, message, status, date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, address, email, phone, service, message, status, date);
+
+    const leadWithId = { id, name, address, email, phone, service, message, status, date };
 
     // Fetch all recipients
-    const recipientsSnapshot = await getDocs(collection(db, 'recipients'));
-    let recipientEmails = recipientsSnapshot.docs.map(doc => doc.data().email);
+    const recipients = db.prepare('SELECT email FROM recipients').all() as { email: string }[];
+    let recipientEmails = recipients.map(r => r.email);
     
     // Fallback to default if list is empty
     if (recipientEmails.length === 0) {
       recipientEmails = ['cpascual1311@gmail.com'];
     }
 
-    // Send email notification to all recipients
+    // Send email notification
     await transporter.sendMail({
       from: `"IronFlow Plumbing Website" <${process.env.EMAIL_USER || 'cpascual1311@gmail.com'}>`,
       to: recipientEmails.join(', '), 
-      subject: `New Service Request from ${newLead.name}`,
+      subject: `New Service Request from ${name}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #0F172A; border-bottom: 2px solid #00E5FF; padding-bottom: 10px;">New Service Request</h2>
           <p>You have received a new service request from the website.</p>
           <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Name:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${newLead.name}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Address:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${newLead.address}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Email:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${newLead.email || 'N/A'}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Phone:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${newLead.phone || 'N/A'}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Service Needed:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${newLead.service}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Message:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${newLead.message || 'N/A'}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Name:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${name}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Address:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${address}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Email:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${email || 'N/A'}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Phone:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${phone || 'N/A'}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Service Needed:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${service}</td></tr>
+            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Message:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${message || 'N/A'}</td></tr>
           </table>
         </div>
       `
     });
-    console.log('Email sent successfully for lead:', docRef.id);
+    
     res.json(leadWithId);
   } catch (error) {
     console.error('Failed to process lead:', error);
@@ -223,31 +207,61 @@ app.post('/api/leads', async (req, res) => {
   }
 });
 
-app.patch('/api/leads/:id', async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
+app.get('/api/leads', adminAuth, (req, res) => {
   try {
-    await updateDoc(doc(db, 'leads', id), { status });
-    res.json({ success: true });
+    const leads = db.prepare('SELECT * FROM leads ORDER BY date DESC').all();
+    res.json(leads);
   } catch (error) {
-    console.error('Failed to update lead:', error);
-    res.status(500).json({ error: 'Failed to update lead' });
+    console.error('Error fetching leads:', error);
+    res.status(500).json({ error: 'Failed to fetch leads' });
   }
 });
 
-// Vite Middleware for SPA fallback
+app.get('/api/leads/:id', adminAuth, (req, res) => {
+  try {
+    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id);
+    if (lead) {
+      res.json(lead);
+    } else {
+      res.status(404).json({ error: 'Lead not found' });
+    }
+  } catch (error) {
+    console.error('Error fetching lead:', error);
+    res.status(500).json({ error: 'Failed to fetch lead' });
+  }
+});
+
+app.delete('/api/leads/:id', adminAuth, (req, res) => {
+  try {
+    db.prepare('DELETE FROM leads WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting lead:', error);
+    res.status(500).json({ error: 'Failed to delete lead' });
+  }
+});
+
+app.all('/api/*', (req, res) => {
+  console.warn(`Unmatched API request: ${req.method} ${req.url}`);
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+});
+
+// Start Server
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server successfully started and listening on http://0.0.0.0:${PORT}`);
+  });
+
+  // Serve static files from dist
+  const distPath = path.join(process.cwd(), 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
     });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static('dist'));
   }
 
-  // Global error handler (Must be last)
+  // Global error handler
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('GLOBAL ERROR:', err);
     if (res.headersSent) {
@@ -255,18 +269,11 @@ async function startServer() {
     }
     res.status(500).json({ 
       error: 'Internal Server Error', 
-      message: err instanceof Error ? err.message : String(err),
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      message: err instanceof Error ? err.message : String(err)
     });
   });
-
-  if (!process.env.VERCEL) {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
 }
 
-startServer();
-
-export default app;
+startServer().catch(err => {
+  console.error('CRITICAL: Failed to start server function:', err);
+});
