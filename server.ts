@@ -34,6 +34,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check route - very top
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
 // Request logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
@@ -248,8 +251,13 @@ app.all('/api/*', (req, res) => {
 
 // Start Server
 async function startServer() {
+  console.log('Attempting to start server on port', PORT);
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully started and listening on http://0.0.0.0:${PORT}`);
+  });
+
+  server.on('error', (err) => {
+    console.error('SERVER ERROR EVENT:', err);
   });
 
   // Serve static files from dist
