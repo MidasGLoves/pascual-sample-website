@@ -134,8 +134,11 @@ export default function Admin() {
         setStatusMessage({ type: 'error', text: err.error || 'Failed to add recipient' });
       }
     } catch (error) {
-      console.error('Error adding recipient:', error);
-      setStatusMessage({ type: 'error', text: 'Network error. Please check your connection.' });
+      console.error('Detailed Add Recipient Error:', error);
+      setStatusMessage({ 
+        type: 'error', 
+        text: `Network Error: ${error instanceof Error ? error.message : 'Unknown'}. Please check if the server is reachable.` 
+      });
     } finally {
       setIsAddingRecipient(false);
     }

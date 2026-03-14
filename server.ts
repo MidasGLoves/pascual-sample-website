@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import nodemailer from 'nodemailer';
 import { initializeApp } from 'firebase/app';
@@ -6,6 +7,7 @@ import { getFirestore, collection, addDoc, updateDoc, doc, getDocs, query, order
 import firebaseConfig from './firebase-applet-config.json';
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 const PORT = 3000;
@@ -55,17 +57,23 @@ app.get('/api/admin/recipients', superAdminAuth, async (req, res) => {
 });
 
 app.post('/api/admin/recipients', superAdminAuth, async (req, res) => {
+  console.log('POST /api/admin/recipients - Request received:', req.body);
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email is required' });
+    if (!email) {
+      console.warn('POST /api/admin/recipients - Missing email');
+      return res.status(400).json({ error: 'Email is required' });
+    }
     
+    console.log('POST /api/admin/recipients - Adding to Firestore...');
     const docRef = await addDoc(collection(db, 'recipients'), {
       email,
       addedAt: new Date().toISOString()
     });
+    console.log('POST /api/admin/recipients - Success, ID:', docRef.id);
     res.json({ id: docRef.id, email });
   } catch (error) {
-    console.error('Error adding recipient:', error);
+    console.error('POST /api/admin/recipients - CRITICAL ERROR:', error);
     res.status(500).json({ error: error instanceof Error ? `Database Error: ${error.message}` : 'Failed to add recipient' });
   }
 });
