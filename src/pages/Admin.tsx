@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Droplet, Users, Mail, Phone, Calendar, Clock, LayoutDashboard, LogOut, LogIn, Trash2, AlertTriangle } from 'lucide-react';
+import { Wrench, Users, Mail, Phone, Calendar, Clock, LayoutDashboard, LogOut, LogIn, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface Lead {
   id: string;
@@ -28,6 +28,14 @@ export default function Admin() {
   const [loginError, setLoginError] = useState('');
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState<{show: boolean, id: string | 'all'}>({ show: false, id: '' });
+  const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+
+  useEffect(() => {
+    if (statusMessage) {
+      const timer = setTimeout(() => setStatusMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [statusMessage]);
 
   useEffect(() => {
     const savedAuth = localStorage.getItem('admin_auth');
@@ -119,14 +127,15 @@ export default function Admin() {
       });
       if (response.ok) {
         setNewRecipientEmail('');
+        setStatusMessage({ type: 'success', text: 'Recipient added successfully!' });
         fetchRecipients();
       } else {
         const err = await response.json();
-        alert(`Error: ${err.error || 'Failed to add recipient'}`);
+        setStatusMessage({ type: 'error', text: err.error || 'Failed to add recipient' });
       }
     } catch (error) {
       console.error('Error adding recipient:', error);
-      alert('Network error. Please try again.');
+      setStatusMessage({ type: 'error', text: 'Network error. Please check your connection.' });
     } finally {
       setIsAddingRecipient(false);
     }
@@ -212,7 +221,7 @@ export default function Admin() {
         <div className="bg-white p-10 rounded-sm shadow-xl max-w-md w-full border border-slate-200">
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 bg-teal/10 rounded-full flex items-center justify-center">
-              <Droplet className="text-teal fill-teal" size={32} />
+              <Wrench className="text-teal fill-teal" size={32} />
             </div>
           </div>
           <h1 className="font-display text-2xl font-black text-slate900 mb-2 text-center">Admin Access</h1>
@@ -274,7 +283,7 @@ export default function Admin() {
       <aside className="w-64 bg-midnight text-white flex flex-col">
         <div className="p-6 border-b border-white/10">
           <div className="flex items-center gap-2 font-display font-black text-xl tracking-tight">
-            <Droplet className="text-teal fill-teal" size={20} />
+            <Wrench className="text-teal fill-teal" size={20} />
             IRONFLOW <span className="text-teal font-mono text-xs ml-1">ADMIN</span>
           </div>
         </div>
@@ -342,7 +351,16 @@ export default function Admin() {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-8 relative">
+          {/* Status Messages */}
+          {statusMessage && (
+            <div className={`fixed top-24 right-8 z-50 flex items-center gap-3 px-6 py-4 rounded-sm shadow-lg border animate-in fade-in slide-in-from-top-4 duration-300 ${
+              statusMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'
+            }`}>
+              {statusMessage.type === 'success' ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
+              <span className="font-bold">{statusMessage.text}</span>
+            </div>
+          )}
           
           {activeTab === 'leads' ? (
             <>

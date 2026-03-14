@@ -66,7 +66,7 @@ app.post('/api/admin/recipients', superAdminAuth, async (req, res) => {
     res.json({ id: docRef.id, email });
   } catch (error) {
     console.error('Error adding recipient:', error);
-    res.status(500).json({ error: 'Failed to add recipient' });
+    res.status(500).json({ error: error instanceof Error ? `Database Error: ${error.message}` : 'Failed to add recipient' });
   }
 });
 
@@ -76,7 +76,7 @@ app.delete('/api/admin/recipients/:id', superAdminAuth, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting recipient:', error);
-    res.status(500).json({ error: 'Failed to delete recipient' });
+    res.status(500).json({ error: error instanceof Error ? `Database Error: ${error.message}` : 'Failed to delete recipient' });
   }
 });
 
