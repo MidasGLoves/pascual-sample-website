@@ -29,6 +29,35 @@ export default function Admin() {
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState<{show: boolean, id: string | 'all'}>({ show: false, id: '' });
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+
+  const safeFetch = async (url: string, options: RequestInit = {}) => {
+    try {
+      const response = await fetch(url, options);
+      const contentType = response.headers.get("content-type");
+      
+      if (!response.ok) {
+        let errorText = '';
+        if (contentType && contentType.includes("application/json")) {
+          const err = await response.json();
+          errorText = err.message || err.error || `Error ${response.status}`;
+        } else {
+          errorText = await response.text();
+          setDebugInfo(errorText);
+          errorText = `Server Error (${response.status}): ${errorText.substring(0, 100)}...`;
+        }
+        throw new Error(errorText);
+      }
+
+      if (contentType && contentType.includes("application/json")) {
+        return await response.json();
+      }
+      return await response.text();
+    } catch (error) {
+      console.error(`Fetch error for ${url}:`, error);
+      throw error;
+    }
+  };
 
   useEffect(() => {
     if (statusMessage) {
@@ -55,13 +84,10 @@ export default function Admin() {
 
   const fetchLeads = async () => {
     try {
-      const response = await fetch('/api/admin/leads', {
+      const data = await safeFetch('/api/admin/leads', {
         headers: { 'x-admin-auth': getAuthHeader() }
       });
-      if (response.ok) {
-        const data = await response.json();
-        setLeads(data);
-      }
+      setLeads(data);
     } catch (error) {
       console.error('Error fetching leads:', error);
     }
@@ -70,13 +96,10 @@ export default function Admin() {
   const fetchRecipients = async () => {
     if (!isSuperAdmin) return;
     try {
-      const response = await fetch('/api/admin/recipients', {
+      const data = await safeFetch('/api/admin/recipients', {
         headers: { 'x-admin-auth': 'SWORD:ROSES' }
       });
-      if (response.ok) {
-        const data = await response.json();
-        setRecipients(data);
-      }
+      setRecipients(data);
     } catch (error) {
       console.error('Error fetching recipients:', error);
     }
@@ -126,8 +149,10 @@ export default function Admin() {
     e.preventDefault();
     if (!newRecipientEmail || isAddingRecipient) return;
     setIsAddingRecipient(true);
+    setStatusMessage(null);
+    setDebugInfo(null);
     try {
-      const response = await fetch('/api/admin/recipients', {
+      await safeFetch('/api/admin/recipients', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -135,25 +160,13 @@ export default function Admin() {
         },
         body: JSON.stringify({ email: newRecipientEmail })
       });
-      if (response.ok) {
-        setNewRecipientEmail('');
-        setStatusMessage({ type: 'success', text: 'Recipient added successfully!' });
-        fetchRecipients();
-      } else {
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const err = await response.json();
-          setStatusMessage({ type: 'error', text: err.error || 'Failed to add recipient' });
-        } else {
-          const text = await response.text();
-          setStatusMessage({ type: 'error', text: `Server Error (${response.status}): ${text.substring(0, 50)}...` });
-        }
-      }
+      setNewRecipientEmail('');
+      setStatusMessage({ type: 'success', text: 'Recipient added successfully!' });
+      fetchRecipients();
     } catch (error) {
-      console.error('Detailed Add Recipient Error:', error);
       setStatusMessage({ 
         type: 'error', 
-        text: `Connection Error: ${error instanceof Error ? error.message : 'Unknown'}. Please check if the server is reachable.` 
+        text: error instanceof Error ? error.message : 'An unexpected error occurred.' 
       });
     } finally {
       setIsAddingRecipient(false);
@@ -378,6 +391,16 @@ export default function Admin() {
             }`}>
               {statusMessage.type === 'success' ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
               <span className="font-bold">{statusMessage.text}</span>
+            </div>
+          )}
+
+          {debugInfo && (
+            <div className="fixed bottom-8 right-8 z-50 max-w-md bg-slate-900 text-white p-4 rounded-sm shadow-2xl text-xs font-mono overflow-auto max-h-64 border border-white/20">
+              <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
+                <span className="text-teal font-bold uppercase tracking-wider">Debug: Raw Server Response</span>
+                <button onClick={() => setDebugInfo(null)} className="text-white/50 hover:text-white">✕</button>
+              </div>
+              <pre className="whitespace-pre-wrap">{debugInfo}</pre>
             </div>
           )}
           

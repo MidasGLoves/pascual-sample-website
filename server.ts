@@ -4,7 +4,20 @@ import { createServer as createViteServer } from 'vite';
 import nodemailer from 'nodemailer';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, updateDoc, doc, getDocs, query, orderBy, deleteDoc, writeBatch } from 'firebase/firestore';
-import firebaseConfig from './firebase-applet-config.json';
+import path from 'path';
+import fs from 'fs';
+
+let firebaseConfig: any = {};
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } else {
+    console.warn('firebase-applet-config.json not found, using empty config');
+  }
+} catch (error) {
+  console.error('Failed to load firebase-applet-config.json:', error);
+}
 
 const app = express();
 app.use(cors());
@@ -91,8 +104,16 @@ app.post('/api/admin/recipients', superAdminAuth, async (req, res) => {
     res.json({ id: docRef.id, email });
   } catch (error) {
     console.error('POST /api/admin/recipients - CRITICAL ERROR:', error);
-    res.status(500).json({ error: error instanceof Error ? `Database Error: ${error.message}` : 'Failed to add recipient' });
+    res.status(500).json({ 
+      error: 'Database Error', 
+      message: error instanceof Error ? error.message : String(error) 
+    });
   }
+});
+
+app.all('/api/*', (req, res) => {
+  console.warn(`Unmatched API request: ${req.method} ${req.url}`);
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
 });
 
 app.delete('/api/admin/recipients/:id', superAdminAuth, async (req, res) => {
@@ -216,15 +237,6 @@ app.patch('/api/leads/:id', async (req, res) => {
 
 // Vite Middleware for SPA fallback
 async function startServer() {
-  // Global error handler
-  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('GLOBAL ERROR:', err);
-    res.status(500).json({ 
-      error: 'Internal Server Error', 
-      message: err instanceof Error ? err.message : String(err) 
-    });
-  });
-
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -234,6 +246,19 @@ async function startServer() {
   } else {
     app.use(express.static('dist'));
   }
+
+  // Global error handler (Must be last)
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('GLOBAL ERROR:', err);
+    if (res.headersSent) {
+      return next(err);
+    }
+    res.status(500).json({ 
+      error: 'Internal Server Error', 
+      message: err instanceof Error ? err.message : String(err),
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  });
 
   if (!process.env.VERCEL) {
     app.listen(PORT, '0.0.0.0', () => {
