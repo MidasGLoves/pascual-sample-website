@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Menu, X, Phone, Droplet, Lock } from 'lucide-react';
+import { Menu, X, Phone, Wrench, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Navbar() {
@@ -21,7 +21,7 @@ export default function Navbar() {
           
           {/* Logo */}
           <div className="flex items-center gap-2 text-white font-display font-black text-2xl tracking-tight">
-            <Droplet className="text-teal fill-teal" size={24} />
+            <Wrench className="text-teal fill-teal" size={24} />
             IRONFLOW
           </div>
 
@@ -74,7 +74,7 @@ export default function Navbar() {
           >
             <div className="flex justify-between items-center mb-12">
               <div className="flex items-center gap-2 text-white font-display font-black text-2xl tracking-tight">
-                <Droplet className="text-teal fill-teal" size={24} />
+                <Wrench className="text-teal fill-teal" size={24} />
                 IRONFLOW
               </div>
               <button onClick={() => setIsOpen(false)} className="text-white hover:text-teal transition-colors">

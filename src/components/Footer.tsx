@@ -1,11 +1,11 @@
-import { Droplet, MapPin, Phone, Mail } from 'lucide-react';
+import { Wrench, MapPin, Phone, Mail } from 'lucide-react';
 
 export default function Footer() {
   return (
     <footer className="bg-midnight py-16 border-t border-white/10 relative overflow-hidden">
       {/* Subtle Watermark */}
       <div className="absolute -bottom-32 -right-32 opacity-5 pointer-events-none">
-        <Droplet size={400} className="text-white" />
+        <Wrench size={400} className="text-white" />
       </div>
 
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-12 relative z-10">
@@ -13,7 +13,7 @@ export default function Footer() {
         {/* Brand Column */}
         <div>
           <div className="flex items-center gap-2 text-white font-display font-black text-2xl tracking-tight mb-6">
-            <Droplet className="text-teal fill-teal" size={24} />
+            <Wrench className="text-teal fill-teal" size={24} />
             IRONFLOW
           </div>
           <p className="font-sans text-steel text-sm leading-relaxed mb-6">
