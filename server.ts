@@ -10,11 +10,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Request logging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 const PORT = 3000;
 
 // Initialize Firebase
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+let db: any;
+try {
+  console.log('Initializing Firebase with config:', { ...firebaseConfig, apiKey: '***' });
+  const firebaseApp = initializeApp(firebaseConfig);
+  db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+  console.log('Firebase initialized successfully');
+} catch (error) {
+  console.error('Firebase initialization FAILED:', error);
+}
 
 // Email configuration
 const transporter = nodemailer.createTransport({
@@ -45,6 +58,10 @@ const superAdminAuth = (req: express.Request, res: express.Response, next: expre
 };
 
 // API Routes
+app.get('/api/ping', (req, res) => {
+  res.json({ message: 'pong', timestamp: new Date().toISOString() });
+});
+
 app.get('/api/admin/recipients', superAdminAuth, async (req, res) => {
   try {
     const snapshot = await getDocs(collection(db, 'recipients'));
@@ -199,6 +216,15 @@ app.patch('/api/leads/:id', async (req, res) => {
 
 // Vite Middleware for SPA fallback
 async function startServer() {
+  // Global error handler
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('GLOBAL ERROR:', err);
+    res.status(500).json({ 
+      error: 'Internal Server Error', 
+      message: err instanceof Error ? err.message : String(err) 
+    });
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

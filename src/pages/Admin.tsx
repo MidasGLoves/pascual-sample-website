@@ -83,6 +83,16 @@ export default function Admin() {
   };
 
   useEffect(() => {
+    const checkServer = async () => {
+      try {
+        const res = await fetch('/api/ping');
+        if (!res.ok) console.error('Server ping failed:', res.status);
+      } catch (err) {
+        console.error('Server unreachable:', err);
+      }
+    };
+    checkServer();
+
     if (isLoggedIn) {
       fetchLeads();
       const interval = setInterval(fetchLeads, 10000);
@@ -130,14 +140,20 @@ export default function Admin() {
         setStatusMessage({ type: 'success', text: 'Recipient added successfully!' });
         fetchRecipients();
       } else {
-        const err = await response.json();
-        setStatusMessage({ type: 'error', text: err.error || 'Failed to add recipient' });
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const err = await response.json();
+          setStatusMessage({ type: 'error', text: err.error || 'Failed to add recipient' });
+        } else {
+          const text = await response.text();
+          setStatusMessage({ type: 'error', text: `Server Error (${response.status}): ${text.substring(0, 50)}...` });
+        }
       }
     } catch (error) {
       console.error('Detailed Add Recipient Error:', error);
       setStatusMessage({ 
         type: 'error', 
-        text: `Network Error: ${error instanceof Error ? error.message : 'Unknown'}. Please check if the server is reachable.` 
+        text: `Connection Error: ${error instanceof Error ? error.message : 'Unknown'}. Please check if the server is reachable.` 
       });
     } finally {
       setIsAddingRecipient(false);
