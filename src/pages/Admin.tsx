@@ -24,6 +24,7 @@ export default function Admin() {
   const [recipients, setRecipients] = useState<{id: string, email: string}[]>([]);
   const [newRecipientEmail, setNewRecipientEmail] = useState('');
   const [isAddingRecipient, setIsAddingRecipient] = useState(false);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -71,7 +72,7 @@ export default function Admin() {
     if (savedAuth === 'PASCUAL:PASCUAL') {
       setIsLoggedIn(true);
       setIsSuperAdmin(false);
-    } else if (savedAuth === 'SWORD:ROSES') {
+    } else if (savedAuth === 'sword:roses') {
       setIsLoggedIn(true);
       setIsSuperAdmin(true);
     }
@@ -97,7 +98,7 @@ export default function Admin() {
     if (!isSuperAdmin) return;
     try {
       const data = await safeFetch('/api/admin/recipients', {
-        headers: { 'x-admin-auth': 'SWORD:ROSES' }
+        headers: { 'x-admin-auth': 'sword:roses' }
       });
       setRecipients(data);
     } catch (error) {
@@ -135,8 +136,8 @@ export default function Admin() {
       setIsLoggedIn(true);
       setIsSuperAdmin(false);
       setLoginError('');
-    } else if (loginForm.username === 'SWORD' && loginForm.password === 'ROSES') {
-      localStorage.setItem('admin_auth', 'SWORD:ROSES');
+    } else if (loginForm.username === 'sword' && loginForm.password === 'roses') {
+      localStorage.setItem('admin_auth', 'sword:roses');
       setIsLoggedIn(true);
       setIsSuperAdmin(true);
       setLoginError('');
@@ -156,7 +157,7 @@ export default function Admin() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'x-admin-auth': 'SWORD:ROSES'
+          'x-admin-auth': 'sword:roses'
         },
         body: JSON.stringify({ email: newRecipientEmail })
       });
@@ -177,11 +178,30 @@ export default function Admin() {
     try {
       const response = await fetch(`/api/admin/recipients/${id}`, {
         method: 'DELETE',
-        headers: { 'x-admin-auth': 'SWORD:ROSES' }
+        headers: { 'x-admin-auth': 'sword:roses' }
       });
       if (response.ok) fetchRecipients();
     } catch (error) {
       console.error('Error removing recipient:', error);
+    }
+  };
+
+  const testEmail = async () => {
+    if (!isSuperAdmin || isTestingEmail) return;
+    setIsTestingEmail(true);
+    setStatusMessage(null);
+    try {
+      const data = await safeFetch('/api/admin/test-email', {
+        headers: { 'x-admin-auth': 'sword:roses' }
+      });
+      setStatusMessage({ type: 'success', text: data.message || 'Test email sent!' });
+    } catch (error) {
+      setStatusMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Test email failed' 
+      });
+    } finally {
+      setIsTestingEmail(false);
     }
   };
 
@@ -579,6 +599,21 @@ export default function Admin() {
                       No recipients added yet. Notifications will go to the default address.
                     </div>
                   )}
+                </div>
+
+                <div className="mt-12 pt-8 border-t border-slate-100">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">System Health</h3>
+                  <button 
+                    onClick={testEmail}
+                    disabled={isTestingEmail}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-sm font-bold text-sm transition-colors disabled:opacity-50"
+                  >
+                    {isTestingEmail ? <Clock className="animate-spin" size={16} /> : <Mail size={16} />}
+                    Send Test Email to cpascual1311@gmail.com
+                  </button>
+                  <p className="mt-2 text-xs text-slate-400">
+                    Use this to verify that the email service is correctly configured with your App Password.
+                  </p>
                 </div>
               </div>
             </div>

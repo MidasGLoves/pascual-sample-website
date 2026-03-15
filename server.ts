@@ -48,7 +48,7 @@ const adminAuth = (req: express.Request, res: express.Response, next: express.Ne
 
 const superAdminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers['x-admin-auth'];
-  if (authHeader === 'SWORD:ROSES') {
+  if (authHeader === 'sword:roses') {
     next();
   } else {
     res.status(403).json({ error: 'Forbidden: Super Admin only' });
@@ -58,6 +58,26 @@ const superAdminAuth = (req: express.Request, res: express.Response, next: expre
 // API Routes
 app.get('/api/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
+});
+
+// Test Email Route (Admin only)
+app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
+  try {
+    if (!transporter) {
+      return res.status(500).json({ error: 'Transporter not initialized' });
+    }
+    await transporter.verify();
+    await transporter.sendMail({
+      from: `"IronFlow Test" <${process.env.EMAIL_USER || 'cpascual1311@gmail.com'}>`,
+      to: 'cpascual1311@gmail.com',
+      subject: 'Test Email',
+      text: 'If you see this, email sending is working!'
+    });
+    res.json({ success: true, message: 'Test email sent successfully' });
+  } catch (error) {
+    console.error('Test email failed:', error);
+    res.status(500).json({ error: 'Test email failed', details: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 app.get('/api/admin/recipients', superAdminAuth, (req, res) => {
@@ -142,12 +162,18 @@ app.patch('/api/admin/leads/:id', adminAuth, (req, res) => {
 });
 
 app.post('/api/leads', async (req, res) => {
+  console.log('Received lead submission:', req.body);
   const id = Math.random().toString(36).substring(2, 15);
   const date = new Date().toISOString();
   const status = 'new';
   const { name, address, email, phone, service, message } = req.body;
 
+  if (!name || !address || !service) {
+    return res.status(400).json({ error: 'Name, address, and service are required' });
+  }
+
   try {
+    console.log('Saving lead to database...');
     db.prepare(`
       INSERT INTO leads (id, name, address, email, phone, service, message, status, date)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -156,39 +182,65 @@ app.post('/api/leads', async (req, res) => {
     const leadWithId = { id, name, address, email, phone, service, message, status, date };
 
     // Fetch all recipients
+    console.log('Fetching recipients...');
     const recipients = db.prepare('SELECT email FROM recipients').all() as { email: string }[];
     let recipientEmails = recipients.map(r => r.email);
     
     // Fallback to default if list is empty
     if (recipientEmails.length === 0) {
+      console.log('No recipients found in DB, using fallback');
       recipientEmails = ['cpascual1311@gmail.com'];
     }
 
-    // Send email notification
-    await transporter.sendMail({
-      from: `"IronFlow Plumbing Website" <${process.env.EMAIL_USER || 'cpascual1311@gmail.com'}>`,
-      to: recipientEmails.join(', '), 
-      subject: `New Service Request from ${name}`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #0F172A; border-bottom: 2px solid #00E5FF; padding-bottom: 10px;">New Service Request</h2>
-          <p>You have received a new service request from the website.</p>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Name:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${name}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Address:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${address}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Email:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${email || 'N/A'}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Phone:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${phone || 'N/A'}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Service Needed:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${service}</td></tr>
-            <tr><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;"><strong>Message:</strong></td><td style="padding: 8px 0; border-bottom: 1px solid #E2E8F0;">${message || 'N/A'}</td></tr>
-          </table>
-        </div>
-      `
-    });
+    console.log('Sending email to:', recipientEmails.join(', '));
+    
+    // Send email notification - handle errors but don't crash the response if possible
+    // We await it here to ensure we know if it failed, but we could also do it in the background
+    try {
+      if (!transporter) {
+        throw new Error('Email transporter not initialized');
+      }
+      
+      await transporter.sendMail({
+        from: `"IronFlow Plumbing Website" <${process.env.EMAIL_USER || 'cpascual1311@gmail.com'}>`,
+        to: recipientEmails.join(', '), 
+        subject: `New Service Request from ${name}`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #0F172A; color: #00E5FF; padding: 20px; text-align: center;">
+              <h1 style="margin: 0; font-size: 24px;">New Service Request</h1>
+            </div>
+            <div style="padding: 30px; background-color: #FFFFFF;">
+              <p style="font-size: 16px; color: #475569; margin-bottom: 24px;">You have received a new service request from the website.</p>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B; width: 140px;"><strong>Name:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${name}</td></tr>
+                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Address:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${address}</td></tr>
+                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Email:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${email || 'N/A'}</td></tr>
+                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Phone:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${phone || 'N/A'}</td></tr>
+                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Service Needed:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${service}</td></tr>
+                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Message:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${message || 'N/A'}</td></tr>
+              </table>
+              <div style="margin-top: 30px; text-align: center;">
+                <a href="${process.env.APP_URL || 'https://ais-dev-uulb7ebalcioziu56ahn3n-430307366333.asia-east1.run.app'}/admin" style="background-color: #00E5FF; color: #0F172A; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">View in Dashboard</a>
+              </div>
+            </div>
+            <div style="background-color: #F8FAFC; padding: 15px; text-align: center; font-size: 12px; color: #94A3B8;">
+              Sent from IronFlow Plumbing Website
+            </div>
+          </div>
+        `
+      });
+      console.log('Email sent successfully');
+    } catch (emailError) {
+      console.error('Email sending failed but lead was saved:', emailError);
+      // We still return 200 because the lead was saved in the DB
+      return res.json({ ...leadWithId, emailError: 'Lead saved but notification email failed to send' });
+    }
     
     res.json(leadWithId);
   } catch (error) {
     console.error('Failed to process lead:', error);
-    res.status(500).json({ error: 'Failed to process lead' });
+    res.status(500).json({ error: 'Failed to process lead', details: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -268,8 +320,37 @@ async function startServer() {
   try {
     initEmail();
     console.log('Email transporter initialized');
+    transporter.verify().then(() => {
+      console.log('Email transporter verified and ready');
+    }).catch(err => {
+      console.error('Email transporter verification failed:', err);
+    });
   } catch (e) {
     console.error('Failed to initialize email:', e);
+  }
+
+  // Serve static files
+  if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    console.log('Checking for static files at:', distPath);
+    if (fs.existsSync(distPath)) {
+      console.log('Static files found, mounting express.static');
+      app.use(express.static(distPath));
+      // SPA fallback
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    } else {
+      console.warn('Static files NOT found at:', distPath);
+    }
   }
 
   console.log('Attempting to start server on port', PORT);
@@ -285,19 +366,6 @@ async function startServer() {
     }
   });
 
-  // Serve static files from dist
-  const distPath = path.join(process.cwd(), 'dist');
-  console.log('Checking for static files at:', distPath);
-  if (fs.existsSync(distPath)) {
-    console.log('Static files found, mounting express.static');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  } else {
-    console.warn('Static files NOT found at:', distPath);
-  }
-
   // Global error handler
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('GLOBAL ERROR:', err);
@@ -310,6 +378,15 @@ async function startServer() {
     });
   });
 }
+
+// Global process error handlers
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
 
 console.log('Executing startServer...');
 startServer().catch(err => {
