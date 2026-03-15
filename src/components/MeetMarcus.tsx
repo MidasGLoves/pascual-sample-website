@@ -16,7 +16,7 @@ export default function MeetMarcus() {
         >
           <div className="absolute inset-0 bg-teal translate-x-4 translate-y-4 rounded-sm" />
           <img 
-            src="https://raw.githubusercontent.com/MidasGLoves/pascual-sample-website/main/pexels-anilkarakaya-6419128.jpg" 
+            src="https://raw.githubusercontent.com/MidasGLoves/pascual-sample-website/main/Plumber_at_work.jpg" 
             alt="Marcus Delgado - Owner of IRONFLOW Plumbing fixing a pipe" 
             className="relative z-10 w-full h-full object-cover rounded-sm grayscale hover:grayscale-0 transition-all duration-700"
             referrerPolicy="no-referrer"
