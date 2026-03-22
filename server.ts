@@ -179,20 +179,31 @@ app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
       return res.status(500).json({ error: 'Transporter not initialized' });
     }
     
-    const targetEmail = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
+    // Fetch all recipients from DB
+    const recipients = db.prepare('SELECT email FROM recipients').all() as { email: string }[];
+    let recipientEmails = recipients.map(r => r.email);
+    
+    const defaultEmail = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
+    
+    // Fallback to default ONLY if list is empty
+    if (recipientEmails.length === 0) {
+      recipientEmails = [defaultEmail];
+    }
+    
     console.log('Verifying transporter...');
     await transporter.verify();
     
-    console.log('Sending test email to:', targetEmail);
+    console.log('Sending test email to:', recipientEmails.join(', '));
     const info = await transporter.sendMail({
-      from: `"IronFlow Test" <${targetEmail}>`,
-      to: targetEmail,
+      from: `"IronFlow Test" <${defaultEmail}>`,
+      to: recipientEmails.join(', '),
       subject: 'Test Email - IronFlow Plumbing',
       text: 'If you see this, email sending is working! This test was triggered from the admin dashboard.',
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
           <h2 style="color: #0f172a;">IronFlow Email Test</h2>
           <p>If you see this, email sending is working correctly!</p>
+          <p>This email was sent to all configured recipients: <strong>${recipientEmails.join(', ')}</strong></p>
           <p><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
           <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
           <p style="font-size: 12px; color: #666;">This test was triggered from the IronFlow Admin Dashboard.</p>
@@ -201,7 +212,7 @@ app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
     });
     
     console.log('Test email sent successfully:', info.messageId);
-    res.json({ success: true, message: 'Test email sent successfully', messageId: info.messageId });
+    res.json({ success: true, message: `Test email sent successfully to ${recipientEmails.length} recipients`, messageId: info.messageId });
   } catch (error) {
     console.error('Test email failed:', error);
     res.status(500).json({ 

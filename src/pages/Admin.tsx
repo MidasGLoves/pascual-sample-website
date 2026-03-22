@@ -618,7 +618,7 @@ export default function Admin() {
                     className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-sm font-bold text-sm transition-colors disabled:opacity-50"
                   >
                     {isTestingEmail ? <Clock className="animate-spin" size={16} /> : <Mail size={16} />}
-                    Send Test Email to cpascual1311@gmail.com
+                    Send Test Email to All Recipients
                   </button>
                   <p className="mt-2 text-xs text-slate-400">
                     Use this to verify that the email service is correctly configured with your App Password.
