@@ -20,6 +20,34 @@ const bookServiceTool: FunctionDeclaration = {
   }
 };
 
+const SYSTEM_INSTRUCTION = `You are the expert AI assistant for IRONFLOW Plumbing in Austin, TX. 
+
+BUSINESS KNOWLEDGE:
+- Owner: Marcus "Iron" Delgado, a Master Plumber (Lic #M-39482) with 22 years of experience.
+- Heritage: 3rd generation Texas plumber. Family-owned, not a franchise.
+- Service Area: Greater Austin, TX.
+- Promise: 60-minute emergency response or the call is free.
+- Pricing: Upfront flat-rate pricing. No hidden fees.
+- Warranty: 2-year warranty on all work.
+- Phone: (512) 555-0199.
+
+CAPABILITIES:
+- Help users diagnose plumbing issues (leaks, clogs, water heater problems, etc.).
+- Provide expert advice on maintenance.
+- Book service requests using the 'bookService' tool.
+
+BOOKING PROTOCOL:
+If a user needs service, you MUST collect:
+1. Full Name
+2. Full Service Address
+3. Phone Number OR Email (both is better)
+4. Description of the issue.
+
+Once you have these, call 'bookService' immediately. 
+
+TONE:
+Professional, expert, confident, and empathetic. You represent Marcus Delgado's high standards. Be concise but helpful.`;
+
 export default function ChatBox() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{role: 'user'|'model', text: string}[]>([
@@ -28,16 +56,44 @@ export default function ChatBox() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const apiKeyRef = useRef<string>('');
-
-  const [chatHistory, setChatHistory] = useState<any[]>([
-     { role: 'user', parts: [{ text: 'Hello' }] },
-     { role: 'model', parts: [{ text: 'Hi! I am the IRONFLOW AI Assistant. How can I help you with your plumbing today?' }] }
-  ]);
+  const chatRef = useRef<any>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const getChatSession = async () => {
+    if (!chatRef.current) {
+      let apiKey = process.env.GEMINI_API_KEY;
+      
+      // Fallback to fetching from backend if env var is missing
+      if (!apiKey) {
+        try {
+          const res = await fetch('/api/config');
+          if (res.ok) {
+            const data = await res.json();
+            apiKey = data.apiKey;
+          }
+        } catch (e) {
+          console.warn("Failed to fetch API key from backend:", e);
+        }
+      }
+
+      if (!apiKey) {
+        throw new Error("API key is missing. Please provide a valid API key.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      chatRef.current = ai.chats.create({
+        model: 'gemini-3.1-pro-preview',
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          tools: [{ functionDeclarations: [bookServiceTool] }]
+        }
+      });
+    }
+    return chatRef.current;
+  };
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -47,75 +103,9 @@ export default function ChatBox() {
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsLoading(true);
 
-    const newHistory = [...chatHistory, { role: 'user', parts: [{ text: userText }] }];
-    setChatHistory(newHistory);
-
-    const generateContentWithRetry = async (ai: any, contents: any, maxRetries = 3) => {
-      let lastError;
-      for (let i = 0; i < maxRetries; i++) {
-        try {
-          return await ai.models.generateContent({
-            model: 'gemini-3.1-pro-preview',
-            contents,
-            config: {
-              systemInstruction: `You are the expert AI assistant for IRONFLOW Plumbing in Austin, TX. 
-              
-              BUSINESS KNOWLEDGE:
-              - Owner: Marcus "Iron" Delgado, a Master Plumber (Lic #M-39482) with 22 years of experience.
-              - Heritage: 3rd generation Texas plumber. Family-owned, not a franchise.
-              - Service Area: Greater Austin, TX.
-              - Promise: 60-minute emergency response or the call is free.
-              - Pricing: Upfront flat-rate pricing. No hidden fees.
-              - Warranty: 2-year warranty on all work.
-              - Phone: (512) 555-0199.
-              
-              CAPABILITIES:
-              - Help users diagnose plumbing issues (leaks, clogs, water heater problems, etc.).
-              - Provide expert advice on maintenance.
-              - Book service requests using the 'bookService' tool.
-              
-              BOOKING PROTOCOL:
-              If a user needs service, you MUST collect:
-              1. Full Name
-              2. Full Service Address
-              3. Phone Number OR Email (both is better)
-              4. Description of the issue.
-              
-              Once you have these, call 'bookService' immediately. 
-              
-              TONE:
-              Professional, expert, confident, and empathetic. You represent Marcus Delgado's high standards. Be concise but helpful.`,
-              tools: [{ functionDeclarations: [bookServiceTool] }]
-            }
-          });
-        } catch (error: any) {
-          lastError = error;
-          console.warn(`Attempt ${i + 1} failed:`, error.message || error);
-          const isRetryable = error.status === 429 || (error.status >= 500 && error.status < 600) || !error.status;
-          if (!isRetryable || i === maxRetries - 1) throw error;
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
-        }
-      }
-      throw lastError;
-    };
-
     try {
-      if (!apiKeyRef.current) {
-        try {
-          const configRes = await fetch('/api/config');
-          if (configRes.ok) {
-            const configData = await configRes.json();
-            apiKeyRef.current = configData.apiKey || '';
-          } else {
-            console.warn('Failed to fetch config, falling back to env var');
-          }
-        } catch (e) {
-          console.warn('Error fetching config:', e);
-        }
-      }
-      
-      const ai = new GoogleGenAI({ apiKey: apiKeyRef.current || process.env.GEMINI_API_KEY || '' });
-      const response = await generateContentWithRetry(ai, newHistory);
+      const chat = await getChatSession();
+      const response = await chat.sendMessage({ message: userText });
 
       if (response.functionCalls && response.functionCalls.length > 0) {
         const call = response.functionCalls[0];
@@ -137,26 +127,29 @@ export default function ChatBox() {
             });
             
             if (!leadResponse.ok) {
-              throw new Error(`Failed to save lead: ${leadResponse.statusText}`);
+              console.error(`Failed to save lead: ${leadResponse.statusText}`);
             }
           } catch (fetchError) {
             console.error("Failed to save lead to database:", fetchError);
-            // Continue anyway so the user gets a response, but maybe log it
           }
 
           const contactMethod = args.phone ? `at ${args.phone}` : `via email at ${args.email}`;
           const successMsg = `I have successfully booked your service request for ${args.address}! Our dispatch team will review it and contact you shortly ${contactMethod}. Is there anything else I can help you with?`;
           
           setMessages(prev => [...prev, { role: 'model', text: successMsg }]);
-          setChatHistory([...newHistory, 
-            { role: 'model', parts: [{ functionCall: call }] },
-            { role: 'user', parts: [{ functionResponse: { name: 'bookService', response: { success: true } } }] },
-            { role: 'model', parts: [{ text: successMsg }] }
-          ]);
+          
+          // Send the function response back to the model
+          await chat.sendMessage({ 
+            message: [{ 
+              functionResponse: { 
+                name: 'bookService', 
+                response: { success: true, message: 'Booking confirmed' } 
+              } 
+            }] 
+          });
         }
       } else if (response.text) {
         setMessages(prev => [...prev, { role: 'model', text: response.text }]);
-        setChatHistory([...newHistory, { role: 'model', parts: [{ text: response.text }] }]);
       }
     } catch (error: any) {
       console.error("Chat error:", error);
@@ -164,6 +157,8 @@ export default function ChatBox() {
         role: 'model', 
         text: `System Error: ${error.message || JSON.stringify(error)}. Please call Marcus directly at (512) 555-0199 for immediate assistance!` 
       }]);
+      // Reset chat session so it can try to recover on the next message
+      chatRef.current = null;
     } finally {
       setIsLoading(false);
     }
