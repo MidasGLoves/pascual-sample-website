@@ -145,7 +145,10 @@ function initEmail() {
 // Admin Auth Middleware
 const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers['x-admin-auth'];
-  if (authHeader === 'PASCUAL:PASCUAL' || authHeader === 'SWORD:ROSES') {
+  if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+  
+  const auth = String(authHeader).toLowerCase();
+  if (auth === 'pascual:pascual' || auth === 'sword:roses') {
     next();
   } else {
     res.status(401).json({ error: 'Unauthorized' });
@@ -154,7 +157,10 @@ const adminAuth = (req: express.Request, res: express.Response, next: express.Ne
 
 const superAdminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers['x-admin-auth'];
-  if (authHeader === 'sword:roses') {
+  if (!authHeader) return res.status(403).json({ error: 'Forbidden' });
+  
+  const auth = String(authHeader).toLowerCase();
+  if (auth === 'sword:roses') {
     next();
   } else {
     res.status(403).json({ error: 'Forbidden: Super Admin only' });
@@ -185,7 +191,7 @@ app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
     
     const defaultEmail = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
     
-    // Fallback to default ONLY if list is empty
+    // If no recipients in DB, use the default email
     if (recipientEmails.length === 0) {
       recipientEmails = [defaultEmail];
     }
@@ -193,17 +199,23 @@ app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
     console.log('Verifying transporter...');
     await transporter.verify();
     
-    console.log('Sending test email to:', recipientEmails.join(', '));
+    console.log('Sending test email FROM:', defaultEmail, 'TO:', recipientEmails.join(', '));
+    
     const info = await transporter.sendMail({
       from: `"IronFlow Test" <${defaultEmail}>`,
       to: recipientEmails.join(', '),
       subject: 'Test Email - IronFlow Plumbing',
-      text: 'If you see this, email sending is working! This test was triggered from the admin dashboard.',
+      text: `If you see this, email sending is working! 
+      
+This test was triggered from the admin dashboard.
+It was sent from: ${defaultEmail}
+It was sent to: ${recipientEmails.join(', ')}`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
           <h2 style="color: #0f172a;">IronFlow Email Test</h2>
           <p>If you see this, email sending is working correctly!</p>
-          <p>This email was sent to all configured recipients: <strong>${recipientEmails.join(', ')}</strong></p>
+          <p><strong>Sent From:</strong> ${defaultEmail}</p>
+          <p><strong>Sent To:</strong> ${recipientEmails.join(', ')}</p>
           <p><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
           <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
           <p style="font-size: 12px; color: #666;">This test was triggered from the IronFlow Admin Dashboard.</p>
@@ -212,7 +224,11 @@ app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
     });
     
     console.log('Test email sent successfully:', info.messageId);
-    res.json({ success: true, message: `Test email sent successfully to ${recipientEmails.length} recipients`, messageId: info.messageId });
+    res.json({ 
+      success: true, 
+      message: `Test email sent successfully to: ${recipientEmails.join(', ')}`, 
+      messageId: info.messageId 
+    });
   } catch (error) {
     console.error('Test email failed:', error);
     res.status(500).json({ 
@@ -328,13 +344,15 @@ app.post('/api/leads', async (req, res) => {
     const recipients = db.prepare('SELECT email FROM recipients').all() as { email: string }[];
     let recipientEmails = recipients.map(r => r.email);
     
+    const defaultEmail = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
+    
     // Fallback to default if list is empty
     if (recipientEmails.length === 0) {
       console.log('No recipients found in DB, using fallback');
-      recipientEmails = ['cpascual1311@gmail.com'];
+      recipientEmails = [defaultEmail];
     }
 
-    console.log('Sending email to:', recipientEmails.join(', '));
+    console.log('Sending email FROM:', defaultEmail, 'TO:', recipientEmails.join(', '));
     
     // Send email notification - handle errors but don't crash the response if possible
     // We await it here to ensure we know if it failed, but we could also do it in the background
@@ -344,7 +362,7 @@ app.post('/api/leads', async (req, res) => {
       }
       
       await transporter.sendMail({
-        from: `"IronFlow Plumbing Website" <${process.env.EMAIL_USER || 'cpascual1311@gmail.com'}>`,
+        from: `"IronFlow Plumbing Website" <${defaultEmail}>`,
         to: recipientEmails.join(', '), 
         subject: `New Service Request from ${name}`,
         html: `
