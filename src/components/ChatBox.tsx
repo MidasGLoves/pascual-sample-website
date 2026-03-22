@@ -29,51 +29,14 @@ export default function ChatBox() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const chatRef = useRef<any>(null);
+  const [chatHistory, setChatHistory] = useState<any[]>([
+     { role: 'user', parts: [{ text: 'Hello' }] },
+     { role: 'model', parts: [{ text: 'Hi! I am the IRONFLOW AI Assistant. How can I help you with your plumbing today?' }] }
+  ]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  const initChat = () => {
-    if (!chatRef.current) {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      chatRef.current = ai.chats.create({
-        model: 'gemini-3.1-pro-preview',
-        config: {
-          systemInstruction: `You are the expert AI assistant for IRONFLOW Plumbing in Austin, TX. 
-          
-          BUSINESS KNOWLEDGE:
-          - Owner: Marcus "Iron" Delgado, a Master Plumber (Lic #M-39482) with 22 years of experience.
-          - Heritage: 3rd generation Texas plumber. Family-owned, not a franchise.
-          - Service Area: Greater Austin, TX.
-          - Promise: 60-minute emergency response or the call is free.
-          - Pricing: Upfront flat-rate pricing. No hidden fees.
-          - Warranty: 2-year warranty on all work.
-          - Phone: (512) 555-0199.
-          
-          CAPABILITIES:
-          - Help users diagnose plumbing issues (leaks, clogs, water heater problems, etc.).
-          - Provide expert advice on maintenance.
-          - Book service requests using the 'bookService' tool.
-          
-          BOOKING PROTOCOL:
-          If a user needs service, you MUST collect:
-          1. Full Name
-          2. Full Service Address
-          3. Phone Number OR Email (both is better)
-          4. Description of the issue.
-          
-          Once you have these, call 'bookService' immediately. 
-          
-          TONE:
-          Professional, expert, confident, and empathetic. You represent Marcus Delgado's high standards. Be concise but helpful.`,
-          tools: [{ functionDeclarations: [bookServiceTool] }]
-        }
-      });
-    }
-    return chatRef.current;
-  };
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -83,19 +46,52 @@ export default function ChatBox() {
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsLoading(true);
 
-    const sendMessageWithRetry = async (chat: any, message: any, maxRetries = 3) => {
+    const newHistory = [...chatHistory, { role: 'user', parts: [{ text: userText }] }];
+    setChatHistory(newHistory);
+
+    const generateContentWithRetry = async (ai: any, contents: any, maxRetries = 3) => {
       let lastError;
       for (let i = 0; i < maxRetries; i++) {
         try {
-          return await chat.sendMessage(message);
+          return await ai.models.generateContent({
+            model: 'gemini-3.1-pro-preview',
+            contents,
+            config: {
+              systemInstruction: `You are the expert AI assistant for IRONFLOW Plumbing in Austin, TX. 
+              
+              BUSINESS KNOWLEDGE:
+              - Owner: Marcus "Iron" Delgado, a Master Plumber (Lic #M-39482) with 22 years of experience.
+              - Heritage: 3rd generation Texas plumber. Family-owned, not a franchise.
+              - Service Area: Greater Austin, TX.
+              - Promise: 60-minute emergency response or the call is free.
+              - Pricing: Upfront flat-rate pricing. No hidden fees.
+              - Warranty: 2-year warranty on all work.
+              - Phone: (512) 555-0199.
+              
+              CAPABILITIES:
+              - Help users diagnose plumbing issues (leaks, clogs, water heater problems, etc.).
+              - Provide expert advice on maintenance.
+              - Book service requests using the 'bookService' tool.
+              
+              BOOKING PROTOCOL:
+              If a user needs service, you MUST collect:
+              1. Full Name
+              2. Full Service Address
+              3. Phone Number OR Email (both is better)
+              4. Description of the issue.
+              
+              Once you have these, call 'bookService' immediately. 
+              
+              TONE:
+              Professional, expert, confident, and empathetic. You represent Marcus Delgado's high standards. Be concise but helpful.`,
+              tools: [{ functionDeclarations: [bookServiceTool] }]
+            }
+          });
         } catch (error: any) {
           lastError = error;
           console.warn(`Attempt ${i + 1} failed:`, error.message || error);
-          // Only retry on 5xx errors or network issues, not 4xx (except 429)
           const isRetryable = error.status === 429 || (error.status >= 500 && error.status < 600) || !error.status;
           if (!isRetryable || i === maxRetries - 1) throw error;
-          
-          // Exponential backoff: 1s, 2s, 4s
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
         }
       }
@@ -103,8 +99,8 @@ export default function ChatBox() {
     };
 
     try {
-      const chat = initChat();
-      const response = await sendMessageWithRetry(chat, { message: userText });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+      const response = await generateContentWithRetry(ai, newHistory);
 
       if (response.functionCalls && response.functionCalls.length > 0) {
         const call = response.functionCalls[0];
@@ -137,25 +133,21 @@ export default function ChatBox() {
           const successMsg = `I have successfully booked your service request for ${args.address}! Our dispatch team will review it and contact you shortly ${contactMethod}. Is there anything else I can help you with?`;
           
           setMessages(prev => [...prev, { role: 'model', text: successMsg }]);
-          
-          // Send the function response back to the model so it knows it succeeded
-          await sendMessageWithRetry(chat, { 
-            message: [{ 
-              functionResponse: { 
-                name: 'bookService', 
-                response: { success: true, message: 'Booking confirmed' } 
-              } 
-            }] 
-          });
+          setChatHistory([...newHistory, 
+            { role: 'model', parts: [{ functionCall: call }] },
+            { role: 'user', parts: [{ functionResponse: { name: 'bookService', response: { success: true } } }] },
+            { role: 'model', parts: [{ text: successMsg }] }
+          ]);
         }
       } else if (response.text) {
         setMessages(prev => [...prev, { role: 'model', text: response.text }]);
+        setChatHistory([...newHistory, { role: 'model', parts: [{ text: response.text }] }]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error:", error);
       setMessages(prev => [...prev, { 
         role: 'model', 
-        text: "I apologize, but I'm having trouble connecting to my plumbing knowledge base right now. Please call Marcus directly at (512) 555-0199 for immediate assistance!" 
+        text: `System Error: ${error.message || JSON.stringify(error)}. Please call Marcus directly at (512) 555-0199 for immediate assistance!` 
       }]);
     } finally {
       setIsLoading(false);
