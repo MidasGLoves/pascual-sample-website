@@ -60,6 +60,10 @@ app.get('/api/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/config', (req, res) => {
+  res.json({ apiKey: process.env.GEMINI_API_KEY || '' });
+});
+
 // Test Email Route (Admin only)
 app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
   try {

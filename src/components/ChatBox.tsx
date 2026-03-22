@@ -28,6 +28,7 @@ export default function ChatBox() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const apiKeyRef = useRef<string>('');
 
   const [chatHistory, setChatHistory] = useState<any[]>([
      { role: 'user', parts: [{ text: 'Hello' }] },
@@ -99,7 +100,13 @@ export default function ChatBox() {
     };
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+      if (!apiKeyRef.current) {
+        const configRes = await fetch('/api/config');
+        const configData = await configRes.json();
+        apiKeyRef.current = configData.apiKey || '';
+      }
+      
+      const ai = new GoogleGenAI({ apiKey: apiKeyRef.current || process.env.GEMINI_API_KEY || '' });
       const response = await generateContentWithRetry(ai, newHistory);
 
       if (response.functionCalls && response.functionCalls.length > 0) {
