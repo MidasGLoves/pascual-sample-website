@@ -83,27 +83,55 @@ export default function ChatBox() {
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsLoading(true);
 
+    const sendMessageWithRetry = async (chat: any, message: any, maxRetries = 3) => {
+      let lastError;
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          return await chat.sendMessage(message);
+        } catch (error: any) {
+          lastError = error;
+          console.warn(`Attempt ${i + 1} failed:`, error.message || error);
+          // Only retry on 5xx errors or network issues, not 4xx (except 429)
+          const isRetryable = error.status === 429 || (error.status >= 500 && error.status < 600) || !error.status;
+          if (!isRetryable || i === maxRetries - 1) throw error;
+          
+          // Exponential backoff: 1s, 2s, 4s
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+        }
+      }
+      throw lastError;
+    };
+
     try {
       const chat = initChat();
-      const response = await chat.sendMessage({ message: userText });
+      const response = await sendMessageWithRetry(chat, { message: userText });
 
       if (response.functionCalls && response.functionCalls.length > 0) {
         const call = response.functionCalls[0];
         if (call.name === 'bookService') {
           const args = call.args as any;
           
-          await fetch('/api/leads', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: args.name,
-              address: args.address,
-              email: args.email || '',
-              phone: args.phone || '',
-              service: args.service,
-              message: args.message || 'Booked via AI Assistant'
-            })
-          });
+          try {
+            const leadResponse = await fetch('/api/leads', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: args.name,
+                address: args.address,
+                email: args.email || '',
+                phone: args.phone || '',
+                service: args.service,
+                message: args.message || 'Booked via AI Assistant'
+              })
+            });
+            
+            if (!leadResponse.ok) {
+              throw new Error(`Failed to save lead: ${leadResponse.statusText}`);
+            }
+          } catch (fetchError) {
+            console.error("Failed to save lead to database:", fetchError);
+            // Continue anyway so the user gets a response, but maybe log it
+          }
 
           const contactMethod = args.phone ? `at ${args.phone}` : `via email at ${args.email}`;
           const successMsg = `I have successfully booked your service request for ${args.address}! Our dispatch team will review it and contact you shortly ${contactMethod}. Is there anything else I can help you with?`;
@@ -111,7 +139,7 @@ export default function ChatBox() {
           setMessages(prev => [...prev, { role: 'model', text: successMsg }]);
           
           // Send the function response back to the model so it knows it succeeded
-          await chat.sendMessage({ 
+          await sendMessageWithRetry(chat, { 
             message: [{ 
               functionResponse: { 
                 name: 'bookService', 
