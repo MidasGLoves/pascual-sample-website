@@ -41,17 +41,17 @@ export default function ChatBox() {
     }
   }, [messages]);
 
-  const getChatSession = async () => {
-    if (!chatRef.current) {
-      let apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+  const getChatSession = async (forceNewWithIndex?: number) => {
+    if (!chatRef.current || forceNewWithIndex !== undefined) {
+      let rawKeys = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
       
-      if (!apiKey) {
+      if (!rawKeys) {
         try {
           const res = await fetch('/api/config');
           if (res.ok) {
             const data = await res.json();
             if (data.apiKey) {
-              apiKey = data.apiKey;
+              rawKeys = data.apiKey;
             }
           }
         } catch (e) {
@@ -59,9 +59,20 @@ export default function ChatBox() {
         }
       }
 
-      if (!apiKey) {
+      if (!rawKeys) {
         throw new Error("API key is missing. Please check your configuration.");
       }
+
+      const keys = rawKeys.split(',').map((k: string) => k.trim()).filter(Boolean);
+      if (keys.length === 0) {
+        throw new Error("No valid API keys found.");
+      }
+
+      // Use the provided index or default to 0
+      const index = forceNewWithIndex !== undefined ? forceNewWithIndex % keys.length : 0;
+      const apiKey = keys[index];
+
+      console.log(`Initializing chat with key index ${index} (starts with ${apiKey.substring(0, 7)})`);
 
       const ai = new GoogleGenAI({ apiKey });
       chatRef.current = ai.chats.create({
@@ -93,77 +104,102 @@ export default function ChatBox() {
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
     setIsLoading(true);
 
-    try {
-      const chat = await getChatSession();
-      const result = await chat.sendMessage({ message: userMessage });
-      const response = result as GenerateContentResponse;
+    let currentAttempt = 0;
+    const maxAttempts = 4; // Try up to 4 keys if we have them
 
-      const functionCalls = response.functionCalls;
-      if (functionCalls && functionCalls.length > 0) {
-        for (const call of functionCalls) {
-          if (call.name === 'submitServiceRequest') {
-            const args = call.args as any;
-            
-            // Call the backend API
-            try {
-              const apiRes = await fetch('/api/leads', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(args),
-              });
+    while (currentAttempt < maxAttempts) {
+      try {
+        const chat = await getChatSession(currentAttempt > 0 ? currentAttempt : undefined);
+        const result = await chat.sendMessage({ message: userMessage });
+        const response = result as GenerateContentResponse;
+
+        const functionCalls = response.functionCalls;
+        if (functionCalls && functionCalls.length > 0) {
+          for (const call of functionCalls) {
+            if (call.name === 'submitServiceRequest') {
+              const args = call.args as any;
               
-              if (apiRes.ok) {
-                // Send the function response back to the model
+              // Call the backend API
+              try {
+                const apiRes = await fetch('/api/leads', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(args),
+                });
+                
+                if (apiRes.ok) {
+                  // Send the function response back to the model
+                  const followUp = await chat.sendMessage({ 
+                    message: [{ 
+                      functionResponse: { 
+                        name: 'submitServiceRequest', 
+                        response: { success: true, message: 'Service request submitted successfully to the backend.' } 
+                      } 
+                    }] 
+                  });
+                  setMessages(prev => [...prev, { role: 'model', text: followUp.text }]);
+                } else {
+                  throw new Error("Failed to submit request to backend");
+                }
+              } catch (apiErr) {
+                console.error("API Error:", apiErr);
                 const followUp = await chat.sendMessage({ 
                   message: [{ 
                     functionResponse: { 
                       name: 'submitServiceRequest', 
-                      response: { success: true, message: 'Service request submitted successfully to the backend.' } 
+                      response: { success: false, message: 'There was an error submitting the request to our system. Please try again or call us directly.' } 
                     } 
                   }] 
                 });
                 setMessages(prev => [...prev, { role: 'model', text: followUp.text }]);
-              } else {
-                throw new Error("Failed to submit request to backend");
               }
-            } catch (apiErr) {
-              console.error("API Error:", apiErr);
-              const followUp = await chat.sendMessage({ 
-                message: [{ 
-                  functionResponse: { 
-                    name: 'submitServiceRequest', 
-                    response: { success: false, message: 'There was an error submitting the request to our system. Please try again or call us directly.' } 
-                  } 
-                }] 
-              });
-              setMessages(prev => [...prev, { role: 'model', text: followUp.text }]);
             }
           }
+        } else if (response.text) {
+          setMessages(prev => [...prev, { role: 'model', text: response.text }]);
         }
-      } else if (response.text) {
-        setMessages(prev => [...prev, { role: 'model', text: response.text }]);
-      }
-    } catch (error: any) {
-      console.error("Chat error:", error);
-      
-      let userFriendlyMessage = "I'm having trouble connecting to my brain right now.";
-      const errorMsg = error.message || JSON.stringify(error);
-      
-      if (errorMsg.includes("API key is missing")) {
-        userFriendlyMessage = "The AI assistant's API key is missing. Please check your configuration.";
-      } else if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("invalid API key")) {
-        userFriendlyMessage = "The AI assistant's API key appears to be invalid. Please check your configuration.";
-      } else if (errorMsg.includes("QUOTA_EXCEEDED")) {
-        userFriendlyMessage = "The AI assistant has reached its usage limit for now.";
-      }
+        
+        // If we reached here, success!
+        setIsLoading(false);
+        return;
 
-      setMessages(prev => [...prev, { 
-        role: 'model', 
-        text: `${userFriendlyMessage} Please call Marcus directly at (512) 555-0199 for immediate assistance!` 
-      }]);
-      chatRef.current = null;
-    } finally {
-      setIsLoading(false);
+      } catch (error: any) {
+        console.error(`Chat error on attempt ${currentAttempt + 1}:`, error);
+        const errorMsg = error.message || JSON.stringify(error);
+        
+        // Check if it's an API key related error that warrants a retry with a different key
+        const isRetryable = errorMsg.includes("API_KEY_INVALID") || 
+                           errorMsg.includes("invalid API key") || 
+                           errorMsg.includes("QUOTA_EXCEEDED") ||
+                           errorMsg.includes("429") ||
+                           errorMsg.includes("400");
+
+        if (isRetryable && currentAttempt < maxAttempts - 1) {
+          console.warn(`Attempt ${currentAttempt + 1} failed with retryable error. Trying next key...`);
+          currentAttempt++;
+          chatRef.current = null; // Reset session to force new key
+          continue;
+        }
+
+        // If not retryable or we've exhausted attempts, show error
+        let userFriendlyMessage = "I'm having trouble connecting to my brain right now.";
+        
+        if (errorMsg.includes("API key is missing")) {
+          userFriendlyMessage = "The AI assistant's API key is missing. Please check your configuration.";
+        } else if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("invalid API key")) {
+          userFriendlyMessage = "All provided AI API keys appear to be invalid.";
+        } else if (errorMsg.includes("QUOTA_EXCEEDED")) {
+          userFriendlyMessage = "The AI assistant has reached its usage limit on all available keys.";
+        }
+
+        setMessages(prev => [...prev, { 
+          role: 'model', 
+          text: `${userFriendlyMessage} Please call Marcus directly at (512) 555-0199 for immediate assistance!` 
+        }]);
+        chatRef.current = null;
+        setIsLoading(false);
+        return;
+      }
     }
   };
 
