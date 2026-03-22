@@ -93,11 +93,51 @@ const PORT = 3000;
 let transporter: nodemailer.Transporter;
 
 function initEmail() {
+  const user = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
+  const pass = process.env.EMAIL_PASS || 'uiie ohzv gvdw ncth';
+  
+  console.log('Initializing email with user:', user);
+  
+  if (!pass || pass.length < 4) {
+    console.error('CRITICAL: EMAIL_PASS is missing or too short!');
+  }
+
   transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // use SSL
     auth: {
-      user: process.env.EMAIL_USER || 'cpascual1311@gmail.com',
-      pass: process.env.EMAIL_PASS || 'uiie ohzv gvdw ncth'
+      user: user,
+      pass: pass
+    },
+    tls: {
+      // do not fail on invalid certs
+      rejectUnauthorized: false
+    }
+  });
+
+  // Verify connection configuration
+  transporter.verify((error, success) => {
+    if (error) {
+      console.error('Email transporter verification failed:', error);
+      // Try fallback to port 587 if 465 fails
+      if (error.message.includes('ETIMEDOUT') || error.message.includes('ECONNREFUSED')) {
+        console.log('Attempting fallback to port 587...');
+        transporter = nodemailer.createTransport({
+          host: 'smtp.gmail.com',
+          port: 587,
+          secure: false, // upgrade later with STARTTLS
+          auth: {
+            user: user,
+            pass: pass
+          },
+          tls: {
+            rejectUnauthorized: false
+          }
+        });
+      }
+    } else {
+      console.log('Email transporter is ready to send messages');
     }
   });
 }
@@ -138,17 +178,36 @@ app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
     if (!transporter) {
       return res.status(500).json({ error: 'Transporter not initialized' });
     }
+    
+    const targetEmail = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
+    console.log('Verifying transporter...');
     await transporter.verify();
-    await transporter.sendMail({
-      from: `"IronFlow Test" <${process.env.EMAIL_USER || 'cpascual1311@gmail.com'}>`,
-      to: 'cpascual1311@gmail.com',
-      subject: 'Test Email',
-      text: 'If you see this, email sending is working!'
+    
+    console.log('Sending test email to:', targetEmail);
+    const info = await transporter.sendMail({
+      from: `"IronFlow Test" <${targetEmail}>`,
+      to: targetEmail,
+      subject: 'Test Email - IronFlow Plumbing',
+      text: 'If you see this, email sending is working! This test was triggered from the admin dashboard.',
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
+          <h2 style="color: #0f172a;">IronFlow Email Test</h2>
+          <p>If you see this, email sending is working correctly!</p>
+          <p><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #666;">This test was triggered from the IronFlow Admin Dashboard.</p>
+        </div>
+      `
     });
-    res.json({ success: true, message: 'Test email sent successfully' });
+    
+    console.log('Test email sent successfully:', info.messageId);
+    res.json({ success: true, message: 'Test email sent successfully', messageId: info.messageId });
   } catch (error) {
     console.error('Test email failed:', error);
-    res.status(500).json({ error: 'Test email failed', details: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({ 
+      error: 'Test email failed', 
+      details: error instanceof Error ? error.message : String(error)
+    });
   }
 });
 
