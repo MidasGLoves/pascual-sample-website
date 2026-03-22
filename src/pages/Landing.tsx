@@ -8,6 +8,7 @@ import Reviews from '../components/Reviews';
 import MeetMarcus from '../components/MeetMarcus';
 import Contact from '../components/Contact';
 import Footer from '../components/Footer';
+import ChatBox from '../components/ChatBox';
 
 export default function Landing() {
   return (
@@ -24,6 +25,7 @@ export default function Landing() {
         <Contact />
       </main>
       <Footer />
+      <ChatBox />
     </div>
   );
 }
