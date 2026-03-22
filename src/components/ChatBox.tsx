@@ -29,31 +29,17 @@ export default function ChatBox() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const [chatHistory, setChatHistory] = useState<any[]>([
-     { role: 'user', parts: [{ text: 'Hello' }] },
-     { role: 'model', parts: [{ text: 'Hi! I am the IRONFLOW AI Assistant. How can I help you with your plumbing today?' }] }
-  ]);
+  const chatRef = useRef<any>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    
-    const userText = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userText }]);
-    setIsLoading(true);
-
-    const newHistory = [...chatHistory, { role: 'user', parts: [{ text: userText }] }];
-    setChatHistory(newHistory);
-
-    try {
+  const initChat = () => {
+    if (!chatRef.current) {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      const response = await ai.models.generateContent({
+      chatRef.current = ai.chats.create({
         model: 'gemini-3.1-pro-preview',
-        contents: newHistory,
         config: {
           systemInstruction: `You are the expert AI assistant for IRONFLOW Plumbing in Austin, TX. 
           
@@ -85,6 +71,21 @@ export default function ChatBox() {
           tools: [{ functionDeclarations: [bookServiceTool] }]
         }
       });
+    }
+    return chatRef.current;
+  };
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    
+    const userText = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userText }]);
+    setIsLoading(true);
+
+    try {
+      const chat = initChat();
+      const response = await chat.sendMessage({ message: userText });
 
       if (response.functionCalls && response.functionCalls.length > 0) {
         const call = response.functionCalls[0];
@@ -108,15 +109,19 @@ export default function ChatBox() {
           const successMsg = `I have successfully booked your service request for ${args.address}! Our dispatch team will review it and contact you shortly ${contactMethod}. Is there anything else I can help you with?`;
           
           setMessages(prev => [...prev, { role: 'model', text: successMsg }]);
-          setChatHistory([...newHistory, 
-            { role: 'model', parts: [{ functionCall: call }] },
-            { role: 'user', parts: [{ functionResponse: { name: 'bookService', response: { success: true } } }] },
-            { role: 'model', parts: [{ text: successMsg }] }
-          ]);
+          
+          // Send the function response back to the model so it knows it succeeded
+          await chat.sendMessage({ 
+            message: [{ 
+              functionResponse: { 
+                name: 'bookService', 
+                response: { success: true, message: 'Booking confirmed' } 
+              } 
+            }] 
+          });
         }
       } else if (response.text) {
         setMessages(prev => [...prev, { role: 'model', text: response.text }]);
-        setChatHistory([...newHistory, { role: 'model', parts: [{ text: response.text }] }]);
       }
     } catch (error) {
       console.error("Chat error:", error);
