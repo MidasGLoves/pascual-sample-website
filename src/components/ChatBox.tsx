@@ -172,9 +172,23 @@ export default function ChatBox() {
       }
     } catch (error: any) {
       console.error("Chat error:", error);
+      
+      let userFriendlyMessage = "I'm having trouble connecting to my brain right now.";
+      const errorMsg = error.message || JSON.stringify(error);
+      
+      if (errorMsg.includes("API key is missing")) {
+        userFriendlyMessage = "The AI assistant's API key is missing. Please check your configuration.";
+      } else if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("invalid API key")) {
+        userFriendlyMessage = "The AI assistant's API key appears to be invalid. Please check your configuration.";
+      } else if (errorMsg.includes("QUOTA_EXCEEDED")) {
+        userFriendlyMessage = "The AI assistant has reached its usage limit for now.";
+      } else if (errorMsg.includes("Safety") || errorMsg.includes("SAFETY")) {
+        userFriendlyMessage = "I'm sorry, but I can't fulfill that request due to safety guidelines.";
+      }
+
       setMessages(prev => [...prev, { 
         role: 'model', 
-        text: `System Error: ${error.message || JSON.stringify(error)}. Please call Marcus directly at (512) 555-0199 for immediate assistance!` 
+        text: `${userFriendlyMessage} Please call Marcus directly at (512) 555-0199 for immediate assistance!` 
       }]);
       // Reset chat session so it can try to recover on the next message
       chatRef.current = null;
