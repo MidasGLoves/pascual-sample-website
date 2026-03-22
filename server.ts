@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
 import express from 'express';
@@ -63,7 +64,9 @@ app.get('/api/ping', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  res.json({ apiKey: process.env.GEMINI_API_KEY || '' });
+  const key = process.env.GEMINI_API_KEY || '';
+  console.log('GET /api/config hit. Key length:', key.length, 'Key starts with:', key.substring(0, 7));
+  res.json({ apiKey: key });
 });
 
 // Test Email Route (Admin only)

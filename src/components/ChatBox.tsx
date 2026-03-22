@@ -68,10 +68,21 @@ export default function ChatBox() {
       
       // Fetch from backend first to get the user's overridden key
       try {
+        console.log('Fetching API key from /api/config...');
         const res = await fetch('/api/config');
+        console.log('Response status:', res.status, res.statusText);
         if (res.ok) {
           const data = await res.json();
-          apiKey = data.apiKey;
+          console.log('Received data from /api/config:', data);
+          if (data.apiKey) {
+            console.log('API key successfully obtained from backend. Length:', data.apiKey.length);
+            apiKey = data.apiKey;
+          } else {
+            console.warn('Backend returned empty apiKey');
+          }
+        } else {
+          const text = await res.text();
+          console.warn('Response not OK. Status:', res.status, 'Body:', text);
         }
       } catch (e) {
         console.warn("Failed to fetch API key from backend:", e);
