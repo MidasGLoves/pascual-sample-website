@@ -43,23 +43,20 @@ export default function ChatBox() {
 
   const getChatSession = async () => {
     if (!chatRef.current) {
-      let apiKey = '';
+      let apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
       
-      try {
-        const res = await fetch('/api/config');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.apiKey) {
-            apiKey = data.apiKey;
-          }
-        }
-      } catch (e) {
-        console.warn("Failed to fetch API key from backend:", e);
-      }
-
       if (!apiKey) {
-        // Fallback to environment if possible (though usually handled by backend)
-        apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+        try {
+          const res = await fetch('/api/config');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.apiKey) {
+              apiKey = data.apiKey;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to fetch API key from backend:", e);
+        }
       }
 
       if (!apiKey) {
@@ -68,7 +65,7 @@ export default function ChatBox() {
 
       const ai = new GoogleGenAI({ apiKey });
       chatRef.current = ai.chats.create({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         config: {
           systemInstruction: `You are a helpful assistant for IronFlow Plumbing. 
           Your goal is to help customers book a service request. 
