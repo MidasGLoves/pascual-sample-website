@@ -1,20 +1,22 @@
 import { useState, FormEvent } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, AlertTriangle } from 'lucide-react';
 
 export default function Contact() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     const formData = new FormData(e.target as HTMLFormElement);
     const email = formData.get('email') as string;
     const phone = formData.get('phone') as string;
     
     if (!email && !phone) {
-      alert('Please provide either an email address or a phone number so we can contact you.');
+      setError('Please provide either an email address or a phone number.');
       return;
     }
 
@@ -22,14 +24,21 @@ export default function Contact() {
     const data = Object.fromEntries(formData.entries());
     
     try {
-      await fetch('/api/leads', {
+      const response = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
+      
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to submit request');
+      }
+      
       setSubmitted(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting form:', error);
+      setError(error.message || 'There was an error submitting your request. Please try again or call us.');
     } finally {
       setLoading(false);
     }
@@ -78,6 +87,12 @@ export default function Contact() {
             onSubmit={handleSubmit} 
             className="space-y-6 bg-limestone p-8 md:p-10 rounded-sm border border-slate-200 shadow-xl"
           >
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-sm text-sm flex items-center gap-2">
+                <AlertTriangle size={16} />
+                {error}
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold text-slate900 mb-2">Full Name *</label>

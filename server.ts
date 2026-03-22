@@ -9,7 +9,50 @@ import fs from 'fs';
 import Database from 'better-sqlite3';
 
 // Initialize SQLite Database
-let db: Database.Database;
+let db: any;
+
+function initDB() {
+  try {
+    // In Vercel/serverless, the root directory is often read-only.
+    // We try to use /tmp if we detect a serverless environment or if the default path fails.
+    let dbPath = path.join(process.cwd(), 'database.sqlite');
+    
+    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      // On Vercel, /tmp is the only writable directory
+      const tmpPath = '/tmp/database.sqlite';
+      // If the local db exists, we could try to copy it to /tmp, but for now let's just use /tmp
+      dbPath = tmpPath;
+    }
+
+    console.log('Initializing SQLite Database at:', dbPath);
+    db = new Database(dbPath);
+    
+    // Create tables if they don't exist
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS leads (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        address TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        service TEXT NOT NULL,
+        message TEXT,
+        status TEXT NOT NULL,
+        date TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS recipients (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        addedAt TEXT NOT NULL
+      );
+    `);
+    console.log('SQLite Database successfully initialized');
+  } catch (e) {
+    console.error('Failed to initialize SQLite:', e);
+    // Don't exit process, allow server to start but API calls will fail gracefully
+  }
+}
 
 const app = express();
 app.use(cors());
@@ -17,6 +60,26 @@ app.use(express.json());
 
 // Health check route - very top
 app.get('/health', (req, res) => res.status(200).send('OK'));
+
+// API Ping for Admin Dashboard
+app.get('/api/ping', (req, res) => {
+  try {
+    // Check if DB is initialized and working
+    if (db) {
+      db.prepare('SELECT 1').get();
+      res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
+    } else {
+      res.status(503).json({ status: 'error', database: 'not_initialized', timestamp: new Date().toISOString() });
+    }
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'error', 
+      database: 'error', 
+      message: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString() 
+    });
+  }
+});
 
 // Request logging
 app.use((req, res, next) => {
@@ -64,7 +127,7 @@ app.get('/api/ping', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  const key = process.env.GEMINI_API_KEY || '';
+  const key = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
   console.log('GET /api/config hit. Key length:', key.length, 'Key starts with:', key.substring(0, 7));
   res.json({ apiKey: key });
 });
@@ -292,113 +355,37 @@ app.all('/api/*', (req, res) => {
   res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
 });
 
-// Start Server
-async function startServer() {
-  console.log('Starting server initialization...');
-  
-  try {
-    const dbPath = path.join(process.cwd(), 'database.sqlite');
-    db = new Database(dbPath);
-    
-    // Create tables if they don't exist
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS leads (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        address TEXT NOT NULL,
-        email TEXT,
-        phone TEXT,
-        service TEXT NOT NULL,
-        message TEXT,
-        status TEXT NOT NULL,
-        date TEXT NOT NULL
-      );
+// Initialize DB and Email
+initDB();
+initEmail();
 
-      CREATE TABLE IF NOT EXISTS recipients (
-        id TEXT PRIMARY KEY,
-        email TEXT NOT NULL,
-        addedAt TEXT NOT NULL
-      );
-    `);
-    console.log('SQLite Database initialized at', dbPath);
-  } catch (e) {
-    console.error('Failed to initialize SQLite:', e);
-    process.exit(1);
-  }
-  
-  try {
-    initEmail();
-    console.log('Email transporter initialized');
-    transporter.verify().then(() => {
-      console.log('Email transporter verified and ready');
-    }).catch(err => {
-      console.error('Email transporter verification failed:', err);
-    });
-  } catch (e) {
-    console.error('Failed to initialize email:', e);
-  }
-
-  // Serve static files
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    console.log('Checking for static files at:', distPath);
-    if (fs.existsSync(distPath)) {
-      console.log('Static files found, mounting express.static');
-      app.use(express.static(distPath));
-      // SPA fallback
-      app.get('*', (req, res, next) => {
-        if (req.path.startsWith('/api')) return next();
-        res.sendFile(path.join(distPath, 'index.html'));
-      });
-    } else {
-      console.warn('Static files NOT found at:', distPath);
-    }
-  }
-
-  console.log('Attempting to start server on port', PORT);
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server successfully started and listening on http://0.0.0.0:${PORT}`);
+// Serve static files (for local development)
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  const { createServer: createViteServer } = await import('vite');
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: 'spa',
   });
-
-  server.on('error', (err: any) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${PORT} is already in use. This is expected if the dev server is restarting.`);
-    } else {
-      console.error('SERVER ERROR EVENT:', err);
-    }
-  });
-
-  // Global error handler
-  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('GLOBAL ERROR:', err);
-    if (res.headersSent) {
-      return next(err);
-    }
-    res.status(500).json({ 
-      error: 'Internal Server Error', 
-      message: err instanceof Error ? err.message : String(err)
+  app.use(vite.middlewares);
+} else if (!process.env.VERCEL) {
+  // Local production mode
+  const distPath = path.join(process.cwd(), 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(path.join(distPath, 'index.html'));
     });
-  });
+  }
 }
 
-// Global process error handlers
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
+// For Vercel/Serverless: Export the app
+export default app;
 
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-});
-
-console.log('Executing startServer...');
-startServer().catch(err => {
-  console.error('CRITICAL: Failed to start server function:', err);
-  process.exit(1);
-});
+// For local development: Start the server if not running as a module
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}

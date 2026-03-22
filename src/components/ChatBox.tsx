@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
-import { MessageSquare, X, Send, User, Bot, Loader2, Phone } from 'lucide-react';
+import { MessageSquare, X, Send, User, Bot, Loader2, Phone, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface Message {
@@ -43,9 +43,11 @@ export default function ChatBox() {
 
   const getChatSession = async (forceNewWithIndex?: number) => {
     if (!chatRef.current || forceNewWithIndex !== undefined) {
+      // Standard Vite way to access env variables
       let rawKeys = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
       
       if (!rawKeys) {
+        console.log("VITE_GEMINI_API_KEY not found in client env, fetching from /api/config...");
         try {
           const res = await fetch('/api/config');
           if (res.ok) {
@@ -53,6 +55,8 @@ export default function ChatBox() {
             if (data.apiKey) {
               rawKeys = data.apiKey;
             }
+          } else {
+            console.error("Failed to fetch config from server:", res.status);
           }
         } catch (e) {
           console.warn("Failed to fetch API key from backend:", e);
@@ -60,7 +64,7 @@ export default function ChatBox() {
       }
 
       if (!rawKeys) {
-        throw new Error("API key is missing. Please check your configuration.");
+        throw new Error("API key is missing. If you are on Vercel, make sure you have added GEMINI_API_KEY or VITE_GEMINI_API_KEY to your project environment variables.");
       }
 
       const keys = rawKeys.split(',').map((k: string) => k.trim()).filter(Boolean);
@@ -237,12 +241,24 @@ export default function ChatBox() {
                   </div>
                 </div>
               </div>
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="text-slate400 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => {
+                    setMessages([{ role: 'model', text: "Chat reset. How can I help you with your plumbing today?" }]);
+                    chatRef.current = null;
+                  }}
+                  title="Reset Chat"
+                  className="text-slate400 hover:text-white transition-colors"
+                >
+                  <RefreshCw size={16} />
+                </button>
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  className="text-slate400 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Messages Area */}

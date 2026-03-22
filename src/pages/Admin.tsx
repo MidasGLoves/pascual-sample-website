@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench, Users, Mail, Phone, Calendar, Clock, LayoutDashboard, LogOut, LogIn, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Wrench, Users, Mail, Phone, Calendar, Clock, LayoutDashboard, LogOut, LogIn, Trash2, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 
 interface Lead {
   id: string;
@@ -382,13 +382,22 @@ export default function Admin() {
               Service Requests
             </h1>
             {leads.length > 0 && (
-              <button 
-                onClick={() => setShowConfirmDelete({ show: true, id: 'all' })}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-sm border border-red-200 transition-colors"
-              >
-                <Trash2 size={14} />
-                Delete All
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={fetchLeads}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-teal hover:bg-teal/5 rounded-sm border border-teal/20 transition-colors"
+                >
+                  <RefreshCw size={14} />
+                  Refresh
+                </button>
+                <button 
+                  onClick={() => setShowConfirmDelete({ show: true, id: 'all' })}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-sm border border-red-200 transition-colors"
+                >
+                  <Trash2 size={14} />
+                  Delete All
+                </button>
+              </div>
             )}
           </div>
           <div className="flex items-center gap-4">
