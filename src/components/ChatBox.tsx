@@ -64,18 +64,26 @@ export default function ChatBox() {
 
   const getChatSession = async () => {
     if (!chatRef.current) {
-      let apiKey = process.env.GEMINI_API_KEY;
+      let apiKey = '';
       
-      // Fallback to fetching from backend if env var is missing
+      // Fetch from backend first to get the user's overridden key
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const data = await res.json();
+          apiKey = data.apiKey;
+        }
+      } catch (e) {
+        console.warn("Failed to fetch API key from backend:", e);
+      }
+
+      // Fallback to process.env if backend fetch failed
       if (!apiKey) {
         try {
-          const res = await fetch('/api/config');
-          if (res.ok) {
-            const data = await res.json();
-            apiKey = data.apiKey;
-          }
+          // @ts-ignore
+          apiKey = process.env.GEMINI_API_KEY;
         } catch (e) {
-          console.warn("Failed to fetch API key from backend:", e);
+          // process is not defined
         }
       }
 
