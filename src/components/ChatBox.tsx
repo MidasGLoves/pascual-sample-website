@@ -101,9 +101,17 @@ export default function ChatBox() {
 
     try {
       if (!apiKeyRef.current) {
-        const configRes = await fetch('/api/config');
-        const configData = await configRes.json();
-        apiKeyRef.current = configData.apiKey || '';
+        try {
+          const configRes = await fetch('/api/config');
+          if (configRes.ok) {
+            const configData = await configRes.json();
+            apiKeyRef.current = configData.apiKey || '';
+          } else {
+            console.warn('Failed to fetch config, falling back to env var');
+          }
+        } catch (e) {
+          console.warn('Error fetching config:', e);
+        }
       }
       
       const ai = new GoogleGenAI({ apiKey: apiKeyRef.current || process.env.GEMINI_API_KEY || '' });
