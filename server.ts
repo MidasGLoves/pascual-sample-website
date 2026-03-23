@@ -102,40 +102,35 @@ function initEmail() {
     console.error('CRITICAL: EMAIL_PASS is missing or too short!');
   }
 
+  // Use 'service: gmail' for better compatibility with App Passwords
   transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // use SSL
+    service: 'gmail',
     auth: {
       user: user,
       pass: pass
-    },
-    tls: {
-      // do not fail on invalid certs
-      rejectUnauthorized: false
     }
   });
 
   // Verify connection configuration
+  console.log('Verifying email transporter...');
   transporter.verify((error, success) => {
     if (error) {
       console.error('Email transporter verification failed:', error);
-      // Try fallback to port 587 if 465 fails
-      if (error.message.includes('ETIMEDOUT') || error.message.includes('ECONNREFUSED')) {
-        console.log('Attempting fallback to port 587...');
-        transporter = nodemailer.createTransport({
-          host: 'smtp.gmail.com',
-          port: 587,
-          secure: false, // upgrade later with STARTTLS
-          auth: {
-            user: user,
-            pass: pass
-          },
-          tls: {
-            rejectUnauthorized: false
-          }
-        });
-      }
+      console.log('Attempting manual config fallback...');
+      
+      // Fallback to manual config if service: gmail fails
+      transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: user,
+          pass: pass
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
     } else {
       console.log('Email transporter is ready to send messages');
     }
@@ -181,40 +176,48 @@ app.get('/api/config', (req, res) => {
 // Test Email Route (Admin only)
 app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
   try {
+    const user = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
+    
     if (!transporter) {
-      return res.status(500).json({ error: 'Transporter not initialized' });
+      console.log('Transporter not found, re-initializing...');
+      initEmail();
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
     // Fetch all recipients from DB
     const recipients = db.prepare('SELECT email FROM recipients').all() as { email: string }[];
     let recipientEmails = recipients.map(r => r.email);
     
-    const defaultEmail = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
-    
     // If no recipients in DB, use the default email
     if (recipientEmails.length === 0) {
-      recipientEmails = [defaultEmail];
+      recipientEmails = [user];
     }
     
-    console.log('Verifying transporter...');
-    await transporter.verify();
+    console.log('Verifying transporter before sending test...');
+    try {
+      await transporter.verify();
+    } catch (verifyError) {
+      console.error('Transporter verification failed during test:', verifyError);
+      initEmail();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
     
-    console.log('Sending test email FROM:', defaultEmail, 'TO:', recipientEmails.join(', '));
+    console.log('Sending test email FROM:', user, 'TO:', recipientEmails.join(', '));
     
     const info = await transporter.sendMail({
-      from: `"IronFlow Test" <${defaultEmail}>`,
+      from: `"IronFlow Test" <${user}>`,
       to: recipientEmails.join(', '),
       subject: 'Test Email - IronFlow Plumbing',
       text: `If you see this, email sending is working! 
       
 This test was triggered from the admin dashboard.
-It was sent from: ${defaultEmail}
+It was sent from: ${user}
 It was sent to: ${recipientEmails.join(', ')}`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
           <h2 style="color: #0f172a;">IronFlow Email Test</h2>
           <p>If you see this, email sending is working correctly!</p>
-          <p><strong>Sent From:</strong> ${defaultEmail}</p>
+          <p><strong>Sent From:</strong> ${user}</p>
           <p><strong>Sent To:</strong> ${recipientEmails.join(', ')}</p>
           <p><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
           <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
@@ -238,6 +241,15 @@ It was sent to: ${recipientEmails.join(', ')}`,
   }
 });
 
+app.get('/api/admin/email-status', superAdminAuth, (req, res) => {
+  const user = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
+  const hasPass = !!(process.env.EMAIL_PASS || 'uiie ohzv gvdw ncth');
+  res.json({ 
+    user, 
+    hasPass,
+    transporterReady: !!transporter 
+  });
+});
 app.get('/api/admin/recipients', superAdminAuth, (req, res) => {
   try {
     const recipients = db.prepare('SELECT * FROM recipients').all();
@@ -344,57 +356,64 @@ app.post('/api/leads', async (req, res) => {
     const recipients = db.prepare('SELECT email FROM recipients').all() as { email: string }[];
     let recipientEmails = recipients.map(r => r.email);
     
-    const defaultEmail = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
+    const user = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
     
     // Fallback to default if list is empty
     if (recipientEmails.length === 0) {
       console.log('No recipients found in DB, using fallback');
-      recipientEmails = [defaultEmail];
+      recipientEmails = [user];
     }
-
-    console.log('Sending email FROM:', defaultEmail, 'TO:', recipientEmails.join(', '));
+    
+    console.log('Sending emails FROM:', user, 'TO:', recipientEmails.join(', '));
     
     // Send email notification - handle errors but don't crash the response if possible
-    // We await it here to ensure we know if it failed, but we could also do it in the background
     try {
       if (!transporter) {
-        throw new Error('Email transporter not initialized');
+        console.log('Transporter not found, re-initializing...');
+        initEmail();
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
-      await transporter.sendMail({
-        from: `"IronFlow Plumbing Website" <${defaultEmail}>`,
-        to: recipientEmails.join(', '), 
-        subject: `New Service Request from ${name}`,
-        html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
-            <div style="background-color: #0F172A; color: #00E5FF; padding: 20px; text-align: center;">
-              <h1 style="margin: 0; font-size: 24px;">New Service Request</h1>
-            </div>
-            <div style="padding: 30px; background-color: #FFFFFF;">
-              <p style="font-size: 16px; color: #475569; margin-bottom: 24px;">You have received a new service request from the website.</p>
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B; width: 140px;"><strong>Name:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${name}</td></tr>
-                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Address:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${address}</td></tr>
-                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Email:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${email || 'N/A'}</td></tr>
-                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Phone:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${phone || 'N/A'}</td></tr>
-                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Service Needed:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${service}</td></tr>
-                <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Message:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${message || 'N/A'}</td></tr>
-              </table>
-              <div style="margin-top: 30px; text-align: center;">
-                <a href="${process.env.APP_URL || 'https://ais-dev-uulb7ebalcioziu56ahn3n-430307366333.asia-east1.run.app'}/admin" style="background-color: #00E5FF; color: #0F172A; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">View in Dashboard</a>
+      // Send to each recipient individually for better reliability
+      const sendPromises = recipientEmails.map(recipient => {
+        const mailOptions = {
+          from: `"IronFlow Plumbing" <${user}>`,
+          to: recipient, 
+          subject: `New Service Request from ${name}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
+              <div style="background-color: #0F172A; color: #00E5FF; padding: 20px; text-align: center;">
+                <h1 style="margin: 0; font-size: 24px;">New Service Request</h1>
+              </div>
+              <div style="padding: 30px; background-color: #FFFFFF;">
+                <p style="font-size: 16px; color: #475569; margin-bottom: 24px;">You have received a new service request from the website.</p>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B; width: 140px;"><strong>Name:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${name}</td></tr>
+                  <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Address:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${address}</td></tr>
+                  <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Email:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${email || 'N/A'}</td></tr>
+                  <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Phone:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${phone || 'N/A'}</td></tr>
+                  <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Service Needed:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${service}</td></tr>
+                  <tr><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #64748B;"><strong>Message:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #F1F5F9; color: #1E293B;">${message || 'N/A'}</td></tr>
+                </table>
+                <div style="margin-top: 30px; text-align: center;">
+                  <a href="${process.env.APP_URL || 'https://ais-dev-uulb7ebalcioziu56ahn3n-430307366333.asia-east1.run.app'}/admin" style="background-color: #00E5FF; color: #0F172A; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">View in Dashboard</a>
+                </div>
+              </div>
+              <div style="background-color: #F8FAFC; padding: 15px; text-align: center; font-size: 12px; color: #94A3B8;">
+                Sent from IronFlow Plumbing Website
               </div>
             </div>
-            <div style="background-color: #F8FAFC; padding: 15px; text-align: center; font-size: 12px; color: #94A3B8;">
-              Sent from IronFlow Plumbing Website
-            </div>
-          </div>
-        `
+          `
+        };
+        return transporter.sendMail(mailOptions);
       });
-      console.log('Email sent successfully');
+      
+      const results = await Promise.all(sendPromises);
+      console.log('Emails sent successfully:', results.map(r => r.messageId).join(', '));
     } catch (emailError) {
-      console.error('Email sending failed but lead was saved:', emailError);
+      console.error('Email sending failed. Error details:', emailError);
       // We still return 200 because the lead was saved in the DB
-      return res.json({ ...leadWithId, emailError: 'Lead saved but notification email failed to send' });
+      return res.json({ ...leadWithId, emailError: 'Lead saved but notification email failed to send', details: String(emailError) });
     }
     
     res.json(leadWithId);

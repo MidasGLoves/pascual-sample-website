@@ -31,6 +31,7 @@ export default function Admin() {
   const [showConfirmDelete, setShowConfirmDelete] = useState<{show: boolean, id: string | 'all'}>({ show: false, id: '' });
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{user: string, hasPass: boolean, transporterReady: boolean} | null>(null);
 
   const safeFetch = async (url: string, options: RequestInit = {}) => {
     try {
@@ -57,6 +58,18 @@ export default function Admin() {
     } catch (error) {
       console.error(`Fetch error for ${url}:`, error);
       throw error;
+    }
+  };
+
+  const fetchEmailStatus = async () => {
+    if (!isSuperAdmin) return;
+    try {
+      const data = await safeFetch('/api/admin/email-status', {
+        headers: { 'x-admin-auth': 'sword:roses' }
+      });
+      setEmailStatus(data);
+    } catch (error) {
+      console.error('Error fetching email status:', error);
     }
   };
 
@@ -123,6 +136,7 @@ export default function Admin() {
       
       if (isSuperAdmin && activeTab === 'recipients') {
         fetchRecipients();
+        fetchEmailStatus();
       }
       
       return () => clearInterval(interval);
@@ -612,6 +626,28 @@ export default function Admin() {
 
                 <div className="mt-12 pt-8 border-t border-slate-100">
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">System Health</h3>
+                  
+                  {emailStatus && (
+                    <div className="mb-4 p-4 bg-slate-50 rounded-sm border border-slate-100 text-sm">
+                      <div className="flex justify-between mb-2">
+                        <span className="text-slate-500">Sender Account:</span>
+                        <span className="font-mono font-bold text-slate-700">{emailStatus.user}</span>
+                      </div>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-slate-500">App Password:</span>
+                        <span className={emailStatus.hasPass ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                          {emailStatus.hasPass ? "✓ Configured" : "✗ Missing"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Service Status:</span>
+                        <span className={emailStatus.transporterReady ? "text-green-600 font-bold" : "text-amber-600 font-bold"}>
+                          {emailStatus.transporterReady ? "✓ Ready" : "⚠ Initializing/Error"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <button 
                     onClick={testEmail}
                     disabled={isTestingEmail}
