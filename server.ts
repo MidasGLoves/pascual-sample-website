@@ -90,9 +90,9 @@ app.use((req, res, next) => {
 const PORT = 3000;
 
 // Email configuration
-let transporter: nodemailer.Transporter;
+let transporter: nodemailer.Transporter | null = null;
 
-function initEmail() {
+async function initEmail() {
   const user = process.env.EMAIL_USER || 'cpascual1311@gmail.com';
   const pass = process.env.EMAIL_PASS || 'uiie ohzv gvdw ncth';
   
@@ -102,39 +102,52 @@ function initEmail() {
     console.error('CRITICAL: EMAIL_PASS is missing or too short!');
   }
 
-  // Use 'service: gmail' for better compatibility with App Passwords
+  // Standard Gmail SMTP config for App Passwords
   transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: user,
       pass: pass
-    }
+    },
+    debug: true, // Enable debug output
+    logger: true // Log to console
   });
 
   // Verify connection configuration
   console.log('Verifying email transporter...');
-  transporter.verify((error, success) => {
-    if (error) {
-      console.error('Email transporter verification failed:', error);
-      console.log('Attempting manual config fallback...');
-      
-      // Fallback to manual config if service: gmail fails
-      transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        auth: {
-          user: user,
-          pass: pass
-        },
-        tls: {
-          rejectUnauthorized: false
-        }
-      });
-    } else {
-      console.log('Email transporter is ready to send messages');
+  try {
+    await transporter.verify();
+    console.log('Email transporter is ready to send messages');
+    return true;
+  } catch (error) {
+    console.error('Email transporter verification failed:', error);
+    
+    // Fallback to port 587
+    console.log('Attempting fallback to port 587...');
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: user,
+        pass: pass
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+    
+    try {
+      await transporter.verify();
+      console.log('Email transporter (fallback) is ready');
+      return true;
+    } catch (fallbackError) {
+      console.error('Email transporter fallback also failed:', fallbackError);
+      return false;
     }
-  });
+  }
 }
 
 // Admin Auth Middleware
@@ -180,8 +193,7 @@ app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
     
     if (!transporter) {
       console.log('Transporter not found, re-initializing...');
-      initEmail();
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await initEmail();
     }
     
     // Fetch all recipients from DB
@@ -195,15 +207,21 @@ app.get('/api/admin/test-email', superAdminAuth, async (req, res) => {
     
     console.log('Verifying transporter before sending test...');
     try {
-      await transporter.verify();
+      if (transporter) {
+        await transporter.verify();
+      } else {
+        throw new Error('Transporter still not initialized after retry');
+      }
     } catch (verifyError) {
       console.error('Transporter verification failed during test:', verifyError);
-      initEmail();
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const success = await initEmail();
+      if (!success) throw new Error(`Failed to initialize email transporter: ${String(verifyError)}`);
     }
     
     console.log('Sending test email FROM:', user, 'TO:', recipientEmails.join(', '));
     
+    if (!transporter) throw new Error('Transporter is null after initialization');
+
     const info = await transporter.sendMail({
       from: `"IronFlow Test" <${user}>`,
       to: recipientEmails.join(', '),
@@ -236,7 +254,8 @@ It was sent to: ${recipientEmails.join(', ')}`,
     console.error('Test email failed:', error);
     res.status(500).json({ 
       error: 'Test email failed', 
-      details: error instanceof Error ? error.message : String(error)
+      details: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
     });
   }
 });
@@ -370,8 +389,11 @@ app.post('/api/leads', async (req, res) => {
     try {
       if (!transporter) {
         console.log('Transporter not found, re-initializing...');
-        initEmail();
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await initEmail();
+      }
+      
+      if (!transporter) {
+        throw new Error('Email transporter could not be initialized');
       }
       
       // Send to each recipient individually for better reliability

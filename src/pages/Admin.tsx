@@ -210,9 +210,11 @@ export default function Admin() {
       });
       setStatusMessage({ type: 'success', text: data.message || 'Test email sent!' });
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Test email failed';
+      const errorDetails = (error as any).details || '';
       setStatusMessage({ 
         type: 'error', 
-        text: error instanceof Error ? error.message : 'Test email failed' 
+        text: `${errorMsg}${errorDetails ? ': ' + errorDetails : ''}`
       });
     } finally {
       setIsTestingEmail(false);
