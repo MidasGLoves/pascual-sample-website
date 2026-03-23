@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench, Users, Mail, Phone, Calendar, Clock, LayoutDashboard, LogOut, LogIn, Trash2, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { Wrench, Users, Mail, Phone, Calendar, Clock, LayoutDashboard, LogOut, LogIn, Trash2, AlertTriangle, CheckCircle, RefreshCw, Bell, BellOff } from 'lucide-react';
 
 interface Lead {
   id: string;
@@ -18,20 +18,21 @@ export default function Admin() {
   const navigate = useNavigate();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'leads' | 'recipients'>('leads');
-  const [recipients, setRecipients] = useState<{id: string, email: string}[]>([]);
-  const [newRecipientEmail, setNewRecipientEmail] = useState('');
-  const [isAddingRecipient, setIsAddingRecipient] = useState(false);
-  const [isTestingEmail, setIsTestingEmail] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState<{show: boolean, id: string | 'all'}>({ show: false, id: '' });
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
-  const [emailStatus, setEmailStatus] = useState<{user: string, hasPass: boolean, transporterReady: boolean} | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  
+  const prevNewLeadsCount = useRef<number>(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Initialize audio
+    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+  }, []);
 
   const safeFetch = async (url: string, options: RequestInit = {}) => {
     try {
@@ -45,7 +46,6 @@ export default function Admin() {
           errorText = err.message || err.error || `Error ${response.status}`;
         } else {
           errorText = await response.text();
-          setDebugInfo(errorText);
           errorText = `Server Error (${response.status}): ${errorText.substring(0, 100)}...`;
         }
         throw new Error(errorText);
@@ -61,18 +61,6 @@ export default function Admin() {
     }
   };
 
-  const fetchEmailStatus = async () => {
-    if (!isSuperAdmin) return;
-    try {
-      const data = await safeFetch('/api/admin/email-status', {
-        headers: { 'x-admin-auth': 'sword:roses' }
-      });
-      setEmailStatus(data);
-    } catch (error) {
-      console.error('Error fetching email status:', error);
-    }
-  };
-
   useEffect(() => {
     if (statusMessage) {
       const timer = setTimeout(() => setStatusMessage(null), 5000);
@@ -84,10 +72,6 @@ export default function Admin() {
     const savedAuth = localStorage.getItem('admin_auth');
     if (savedAuth === 'PASCUAL:PASCUAL') {
       setIsLoggedIn(true);
-      setIsSuperAdmin(false);
-    } else if (savedAuth === 'sword:roses') {
-      setIsLoggedIn(true);
-      setIsSuperAdmin(true);
     }
     setAuthLoading(false);
   }, []);
@@ -102,129 +86,56 @@ export default function Admin() {
         headers: { 'x-admin-auth': getAuthHeader() }
       });
       setLeads(data);
+      
+      const newLeads = data.filter((l: Lead) => l.status === 'new').length;
+      
+      // Notification logic
+      if (newLeads > prevNewLeadsCount.current) {
+        if (notificationsEnabled && audioRef.current) {
+          audioRef.current.play().catch(e => console.log('Audio play blocked:', e));
+        }
+      }
+      
+      prevNewLeadsCount.current = newLeads;
+      
+      // Update tab title
+      if (newLeads > 0) {
+        document.title = `(${newLeads}) IronFlow Admin`;
+      } else {
+        document.title = `IronFlow Admin`;
+      }
+      
     } catch (error) {
       console.error('Error fetching leads:', error);
     }
   };
 
-  const fetchRecipients = async () => {
-    if (!isSuperAdmin) return;
-    try {
-      const data = await safeFetch('/api/admin/recipients', {
-        headers: { 'x-admin-auth': 'sword:roses' }
-      });
-      setRecipients(data);
-    } catch (error) {
-      console.error('Error fetching recipients:', error);
-    }
-  };
-
   useEffect(() => {
-    const checkServer = async () => {
-      try {
-        const res = await fetch('/api/ping');
-        if (!res.ok) console.error('Server ping failed:', res.status);
-      } catch (err) {
-        console.error('Server unreachable:', err);
-      }
-    };
-    checkServer();
-
     if (isLoggedIn) {
       fetchLeads();
-      const interval = setInterval(fetchLeads, 10000);
-      
-      if (isSuperAdmin && activeTab === 'recipients') {
-        fetchRecipients();
-        fetchEmailStatus();
-      }
-      
-      return () => clearInterval(interval);
+      const interval = setInterval(fetchLeads, 5000); // Poll every 5 seconds for faster notifications
+      return () => {
+        clearInterval(interval);
+        document.title = 'IronFlow Plumbing';
+      };
     }
-  }, [isLoggedIn, isSuperAdmin, activeTab]);
+  }, [isLoggedIn, notificationsEnabled]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginForm.username === 'PASCUAL' && loginForm.password === 'PASCUAL') {
       localStorage.setItem('admin_auth', 'PASCUAL:PASCUAL');
       setIsLoggedIn(true);
-      setIsSuperAdmin(false);
-      setLoginError('');
-    } else if (loginForm.username === 'sword' && loginForm.password === 'roses') {
-      localStorage.setItem('admin_auth', 'sword:roses');
-      setIsLoggedIn(true);
-      setIsSuperAdmin(true);
       setLoginError('');
     } else {
       setLoginError('Invalid credentials. Please try again.');
     }
   };
 
-  const addRecipient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRecipientEmail || isAddingRecipient) return;
-    setIsAddingRecipient(true);
-    setStatusMessage(null);
-    setDebugInfo(null);
-    try {
-      await safeFetch('/api/admin/recipients', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-auth': 'sword:roses'
-        },
-        body: JSON.stringify({ email: newRecipientEmail })
-      });
-      setNewRecipientEmail('');
-      setStatusMessage({ type: 'success', text: 'Recipient added successfully!' });
-      fetchRecipients();
-    } catch (error) {
-      setStatusMessage({ 
-        type: 'error', 
-        text: error instanceof Error ? error.message : 'An unexpected error occurred.' 
-      });
-    } finally {
-      setIsAddingRecipient(false);
-    }
-  };
-
-  const removeRecipient = async (id: string) => {
-    try {
-      const response = await fetch(`/api/admin/recipients/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-auth': 'sword:roses' }
-      });
-      if (response.ok) fetchRecipients();
-    } catch (error) {
-      console.error('Error removing recipient:', error);
-    }
-  };
-
-  const testEmail = async () => {
-    if (!isSuperAdmin || isTestingEmail) return;
-    setIsTestingEmail(true);
-    setStatusMessage(null);
-    try {
-      const data = await safeFetch('/api/admin/test-email', {
-        headers: { 'x-admin-auth': 'sword:roses' }
-      });
-      setStatusMessage({ type: 'success', text: data.message || 'Test email sent!' });
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Test email failed';
-      const errorDetails = (error as any).details || '';
-      setStatusMessage({ 
-        type: 'error', 
-        text: `${errorMsg}${errorDetails ? ': ' + errorDetails : ''}`
-      });
-    } finally {
-      setIsTestingEmail(false);
-    }
-  };
-
   const handleLogout = () => {
     localStorage.removeItem('admin_auth');
     setIsLoggedIn(false);
-    setIsSuperAdmin(false);
+    document.title = 'IronFlow Plumbing';
     navigate('/');
   };
 
@@ -293,7 +204,7 @@ export default function Admin() {
             </div>
           </div>
           <h1 className="font-display text-2xl font-black text-slate900 mb-2 text-center">Admin Access</h1>
-          <p className="text-slate-500 mb-8 text-center text-sm">Enter the shared credentials to access the dashboard.</p>
+          <p className="text-slate-500 mb-8 text-center text-sm">Enter the credentials to access the dashboard.</p>
           
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -358,8 +269,7 @@ export default function Admin() {
         
         <nav className="flex-1 p-4 space-y-2">
           <button 
-            onClick={() => setActiveTab('leads')}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-sm transition-colors ${activeTab === 'leads' ? 'bg-teal/10 text-teal' : 'text-steel hover:bg-white/5 hover:text-white'}`}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-sm transition-colors bg-teal/10 text-teal`}
           >
             <div className="flex items-center gap-3 font-semibold">
               <LayoutDashboard size={18} />
@@ -370,15 +280,13 @@ export default function Admin() {
             )}
           </button>
 
-          {isSuperAdmin && (
-            <button 
-              onClick={() => setActiveTab('recipients')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-sm font-semibold transition-colors ${activeTab === 'recipients' ? 'bg-teal/10 text-teal' : 'text-steel hover:bg-white/5 hover:text-white'}`}
-            >
-              <Mail size={18} />
-              Email Recipients
-            </button>
-          )}
+          <button 
+            onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-sm font-semibold transition-colors text-steel hover:bg-white/5 hover:text-white`}
+          >
+            {notificationsEnabled ? <Bell size={18} /> : <BellOff size={18} />}
+            {notificationsEnabled ? 'Notifications On' : 'Notifications Off'}
+          </button>
         </nav>
 
         <div className="p-4 border-t border-white/10">
@@ -438,233 +346,111 @@ export default function Admin() {
               <span className="font-bold">{statusMessage.text}</span>
             </div>
           )}
-
-          {debugInfo && (
-            <div className="fixed bottom-8 right-8 z-50 max-w-md bg-slate-900 text-white p-4 rounded-sm shadow-2xl text-xs font-mono overflow-auto max-h-64 border border-white/20">
-              <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
-                <span className="text-teal font-bold uppercase tracking-wider">Debug: Raw Server Response</span>
-                <button onClick={() => setDebugInfo(null)} className="text-white/50 hover:text-white">✕</button>
-              </div>
-              <pre className="whitespace-pre-wrap">{debugInfo}</pre>
-            </div>
-          )}
           
-          {activeTab === 'leads' ? (
-            <>
-              {/* Note about email copy */}
-              <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-sm flex items-start gap-3">
-                <Mail className="text-blue-500 mt-0.5" size={18} />
-                <p className="text-sm text-blue-700 font-medium">
-                  Note: A copy of every service request is automatically sent to the registered business owner email addresses.
-                </p>
+          {/* Stats Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-sm border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
+                <Users className="text-blue-500" size={24} />
               </div>
-
-              {/* Stats Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-sm border border-slate-200 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
-                    <Users className="text-blue-500" size={24} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-500 uppercase tracking-wider">Total Leads</div>
-                    <div className="text-3xl font-display font-black text-slate900">{leads.length}</div>
-                  </div>
-                </div>
-                
-                <div className="bg-white p-6 rounded-sm border border-slate-200 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-                    <Clock className="text-red-500" size={24} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-500 uppercase tracking-wider">New Requests</div>
-                    <div className="text-3xl font-display font-black text-slate900">{newLeadsCount}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Data Table */}
-              <div className="bg-white rounded-sm border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-bold">
-                      <th className="p-4">Status</th>
-                      <th className="p-4">Customer Details</th>
-                      <th className="p-4">Service Needed</th>
-                      <th className="p-4">Date Received</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {leads.map(lead => (
-                      <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-4">
-                          {lead.status === 'new' && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> New</span>}
-                          {lead.status === 'contacted' && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Contacted</span>}
-                          {lead.status === 'resolved' && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Resolved</span>}
-                        </td>
-                        <td className="p-4">
-                          <div className="font-bold text-slate900">{lead.name}</div>
-                          <div className="text-sm text-slate-700 mt-1">{lead.address}</div>
-                          {lead.email && (
-                            <div className="flex items-center gap-1 text-sm text-slate-500 mt-1">
-                              <Mail size={14} /> {lead.email}
-                            </div>
-                          )}
-                          {lead.phone && (
-                            <div className="flex items-center gap-1 text-sm text-slate-500 mt-1">
-                              <Phone size={14} /> {lead.phone}
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <div className="font-semibold text-slate-700">{lead.service}</div>
-                          {lead.message && (
-                            <div className="text-sm text-slate-500 mt-1 max-w-xs truncate" title={lead.message}>
-                              "{lead.message}"
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-1 text-sm text-slate-600">
-                            <Calendar size={14} />
-                            {new Date(lead.date).toLocaleDateString()}
-                          </div>
-                          <div className="text-xs text-slate-400 mt-1">
-                            {new Date(lead.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                          </div>
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <select 
-                              value={lead.status}
-                              onChange={(e) => updateStatus(lead.id, e.target.value)}
-                              className="bg-white border border-slate-300 text-sm rounded-sm px-3 py-1.5 outline-none focus:border-teal font-semibold text-slate-700"
-                            >
-                              <option value="new">Mark New</option>
-                              <option value="contacted">Mark Contacted</option>
-                              <option value="resolved">Mark Resolved</option>
-                            </select>
-                            <button 
-                              onClick={() => setShowConfirmDelete({ show: true, id: lead.id })}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors"
-                              title="Delete Request"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {leads.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="p-8 text-center text-slate-500">No service requests yet.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          ) : (
-            <div className="max-w-2xl">
-              <div className="bg-white rounded-sm border border-slate-200 shadow-sm p-8 mb-8">
-                <h2 className="font-display text-xl font-bold text-slate900 mb-6 flex items-center gap-2">
-                  <Mail className="text-teal" size={20} />
-                  Manage Notification Recipients
-                </h2>
-                
-                <form onSubmit={addRecipient} className="flex gap-3 mb-8">
-                  <input 
-                    type="email" 
-                    value={newRecipientEmail}
-                    onChange={(e) => setNewRecipientEmail(e.target.value)}
-                    placeholder="Enter business owner email"
-                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-sm focus:outline-none focus:border-teal transition-colors"
-                    required
-                  />
-                  <button 
-                    type="submit"
-                    disabled={isAddingRecipient}
-                    className="bg-teal hover:bg-teal/90 text-midnight px-6 py-3 rounded-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isAddingRecipient ? (
-                      <>
-                        <Clock className="animate-spin" size={18} />
-                        Adding...
-                      </>
-                    ) : (
-                      'Add Recipient'
-                    )}
-                  </button>
-                </form>
-
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Recipients</h3>
-                  {recipients.length > 0 ? (
-                    <div className="divide-y divide-slate-100 border border-slate-100 rounded-sm">
-                      {recipients.map(recipient => (
-                        <div key={recipient.id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-teal/10 flex items-center justify-center text-teal">
-                              <Mail size={14} />
-                            </div>
-                            <span className="font-semibold text-slate-700">{recipient.email}</span>
-                          </div>
-                          <button 
-                            onClick={() => removeRecipient(recipient.id)}
-                            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-                            title="Remove Recipient"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center bg-slate-50 rounded-sm text-slate-500 border border-dashed border-slate-200">
-                      No recipients added yet. Notifications will go to the default address.
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-12 pt-8 border-t border-slate-100">
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">System Health</h3>
-                  
-                  {emailStatus && (
-                    <div className="mb-4 p-4 bg-slate-50 rounded-sm border border-slate-100 text-sm">
-                      <div className="flex justify-between mb-2">
-                        <span className="text-slate-500">Sender Account:</span>
-                        <span className="font-mono font-bold text-slate-700">{emailStatus.user}</span>
-                      </div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-slate-500">App Password:</span>
-                        <span className={emailStatus.hasPass ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                          {emailStatus.hasPass ? "✓ Configured" : "✗ Missing"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Service Status:</span>
-                        <span className={emailStatus.transporterReady ? "text-green-600 font-bold" : "text-amber-600 font-bold"}>
-                          {emailStatus.transporterReady ? "✓ Ready" : "⚠ Initializing/Error"}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <button 
-                    onClick={testEmail}
-                    disabled={isTestingEmail}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-sm font-bold text-sm transition-colors disabled:opacity-50"
-                  >
-                    {isTestingEmail ? <Clock className="animate-spin" size={16} /> : <Mail size={16} />}
-                    Send Test Email to All Recipients
-                  </button>
-                  <p className="mt-2 text-xs text-slate-400">
-                    Use this to verify that the email service is correctly configured with your App Password.
-                  </p>
-                </div>
+              <div>
+                <div className="text-sm font-bold text-slate-500 uppercase tracking-wider">Total Leads</div>
+                <div className="text-3xl font-display font-black text-slate900">{leads.length}</div>
               </div>
             </div>
-          )}
+            
+            <div className="bg-white p-6 rounded-sm border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+                <Clock className="text-red-500" size={24} />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-slate-500 uppercase tracking-wider">New Requests</div>
+                <div className="text-3xl font-display font-black text-slate900">{newLeadsCount}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Data Table */}
+          <div className="bg-white rounded-sm border border-slate-200 shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Customer Details</th>
+                  <th className="p-4">Service Needed</th>
+                  <th className="p-4">Date Received</th>
+                  <th className="p-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {leads.map(lead => (
+                  <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4">
+                      {lead.status === 'new' && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> New</span>}
+                      {lead.status === 'contacted' && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Contacted</span>}
+                      {lead.status === 'resolved' && <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Resolved</span>}
+                    </td>
+                    <td className="p-4">
+                      <div className="font-bold text-slate900">{lead.name}</div>
+                      <div className="text-sm text-slate-700 mt-1">{lead.address}</div>
+                      {lead.email && (
+                        <div className="flex items-center gap-1 text-sm text-slate-500 mt-1">
+                          <Mail size={14} /> {lead.email}
+                        </div>
+                      )}
+                      {lead.phone && (
+                        <div className="flex items-center gap-1 text-sm text-slate-500 mt-1">
+                          <Phone size={14} /> {lead.phone}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <div className="font-semibold text-slate-700">{lead.service}</div>
+                      {lead.message && (
+                        <div className="text-sm text-slate-500 mt-1 max-w-xs truncate" title={lead.message}>
+                          "{lead.message}"
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-1 text-sm text-slate-600">
+                        <Calendar size={14} />
+                        {new Date(lead.date).toLocaleDateString()}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        {new Date(lead.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </div>
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <select 
+                          value={lead.status}
+                          onChange={(e) => updateStatus(lead.id, e.target.value)}
+                          className="bg-white border border-slate-300 text-sm rounded-sm px-3 py-1.5 outline-none focus:border-teal font-semibold text-slate-700"
+                        >
+                          <option value="new">Mark New</option>
+                          <option value="contacted">Mark Contacted</option>
+                          <option value="resolved">Mark Resolved</option>
+                        </select>
+                        <button 
+                          onClick={() => setShowConfirmDelete({ show: true, id: lead.id })}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors"
+                          title="Delete Request"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {leads.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-500">No service requests yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </main>
 
